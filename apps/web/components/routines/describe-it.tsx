@@ -45,7 +45,7 @@ export function DescribeIt({
     };
   }, []);
 
-  const describe = async (words = text) => {
+  const fillIn = async (words = text) => {
     if (words.trim().length < 3 || state.kind === "working") return;
     setText(words);
     setState({ kind: "working" });
@@ -119,7 +119,7 @@ export function DescribeIt({
         onKeyDown={(e) => {
           if (e.key === "Enter" && (e.metaKey || e.ctrlKey)) {
             e.preventDefault();
-            void describe();
+            void fillIn();
           }
         }}
         placeholder="Say what should happen, and when…"
@@ -133,7 +133,7 @@ export function DescribeIt({
               <button
                 key={x}
                 type="button"
-                onClick={() => void describe(x)}
+                onClick={() => void fillIn(x)}
                 className="flex items-start gap-2 rounded-lg bg-surface-secondary px-2.5 py-1.5 text-start text-small text-muted hover:text-foreground"
               >
                 <CornerDownRight className="mt-0.5 size-3.5 shrink-0" aria-hidden />
@@ -207,7 +207,7 @@ export function DescribeIt({
       ) : null}
       {state.kind !== "working" ? (
         <div className="flex justify-end">
-          <Button size="sm" variant="outline" isDisabled={text.trim().length < 3} onPress={() => void describe()}>
+          <Button size="sm" variant="outline" isDisabled={text.trim().length < 3} onPress={() => void fillIn()}>
             <Sparkles className="size-3.5" aria-hidden />
             Fill it in
           </Button>

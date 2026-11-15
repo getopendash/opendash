@@ -36,10 +36,15 @@
       "tailwindDirectives": true
     }
   },
+  "yaml": {
+    "formatter": {
+      "enabled": false
+    }
+  },
   "linter": {
     "enabled": true,
     "rules": {
-      "recommended": true,
+      "preset": "recommended",
       "nursery": {
         "noTailwindArbitraryValue": "error"
       }
