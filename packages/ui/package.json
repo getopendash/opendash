@@ -15,12 +15,12 @@
     "typecheck": "tsc -p tsconfig.json"
   },
   "dependencies": {
-    "@heroui/react": "3.2.6",
-    "@heroui/styles": "3.2.6",
-    "@tanstack/react-table": "9.2.8",
+    "@heroui/react": "3.2.7",
+    "@heroui/styles": "3.2.7",
+    "@tanstack/react-table": "9.3.1",
     "@opendash/charts": "workspace:*",
     "@opendash/tokens": "workspace:*",
-    "lucide-react": "1.52.0"
+    "lucide-react": "1.72.0"
   },
   "peerDependencies": {
     "react": "^19.2.0",
@@ -30,9 +30,9 @@
     "@types/culori": "4.0.1",
     "@types/react": "19.3.0",
     "culori": "4.0.2",
-    "react": "19.3.0",
-    "react-dom": "19.3.0",
+    "react": "19.3.1",
+    "react-dom": "19.3.1",
     "tsx": "4.23.15",
-    "vitest": "5.0.3"
+    "vitest": "5.1.0"
   }
 }

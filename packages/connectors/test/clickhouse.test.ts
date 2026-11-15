@@ -216,6 +216,7 @@ describe.skipIf(!available)("clickhouse", () => {
       ["select 1 format JSON", "denied_clause", /FORMAT/],
       ["select 1 into outfile 'x.csv'", "denied_clause", /INTO OUTFILE/],
       ["select 1 settings max_execution_time = 3600", "denied_clause", /SETTINGS/],
+      ["(select 1) union all (select 2) settings max_threads = 1", "denied_clause", /SETTINGS/],
       ["select * from url('http://127.0.0.1:1/', CSV, 'a String')", "denied_function", /url\(\)/],
       ["select * from remote('127.0.0.1', system.one)", "denied_function", /remote\(\)/],
       ["select sleep(2)", "denied_function", /sleep/],

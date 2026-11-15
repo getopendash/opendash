@@ -13,6 +13,9 @@ import { createPicker, type PickElement, selectionOf } from "../src/runtime/pick
 import { parseSourceMark, selectionLabel } from "../src/select";
 import { proof } from "./fixtures/proof";
 
+/** A component that draws nothing, as one an App defines. */
+const Queue = () => null;
+
 const files = {
   "/App.tsx": `import { Queue } from "./components/Queue";
 export default function App() {
@@ -87,7 +90,6 @@ describe("the frame's JSX adapter", () => {
   });
 
   it("leaves a component's props as written, and an element with no source unmarked", () => {
-    const Queue = () => null;
     const el = jsxDEV(Queue, { items: [] }, undefined, false, at) as ReactElement<Record<string, unknown>>;
     expect(el.props).toEqual({ items: [] });
     expect(el.key).toBeNull();
