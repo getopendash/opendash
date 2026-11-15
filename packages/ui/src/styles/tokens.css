@@ -1,0 +1,207 @@
+/*
+ * OpenDash semantic tokens and the Tailwind bridge.
+ *
+ * The visual values (colours, radii, density, shadows) live in ONE file:
+ *   packages/ui/src/styles/opendash-theme.css
+ * This file adds only what the design theme doesn't define:
+ *   - product meanings (verification status, deltas, value references, diffs) as ALIASES of design tokens;
+ *   - control size tokens our own components use (same numbers as the design theme's component rules);
+ *   - the named type scale;
+ *   - Tailwind utilities for all of the above (bg-status-verified-soft, text-delta-good, text-body, …).
+ * No new colour values are introduced here.
+ *
+ * Why Tailwind's default palette and type sizes are NOT removed
+ *   HeroUI's own component CSS uses @apply with Tailwind defaults (text-sm, text-xs, bg-white, text-black, …),
+ *   so resetting --color-* or --text-* breaks HeroUI's build. Our code is kept on tokens by lint rules instead
+ *   (tools/biome/*.grit and Biome's noTailwindArbitraryValue).
+ */
+
+@theme inline {
+  /* Geist is loaded by apps/web with next/font (geist package), which exposes these variables. */
+  --font-sans: var(--font-geist-sans), "Geist", ui-sans-serif, system-ui, sans-serif;
+  --font-mono: var(--font-geist-mono), "Geist Mono", ui-monospace, "SFMono-Regular", monospace;
+
+  --color-muted-tertiary: var(--muted-tertiary);
+
+  --color-status-verified: var(--status-verified);
+  --color-status-verified-soft: var(--status-verified-soft);
+  --color-status-verified-foreground: var(--status-verified-foreground);
+  --color-status-progress: var(--status-progress);
+  --color-status-progress-soft: var(--status-progress-soft);
+  --color-status-progress-foreground: var(--status-progress-foreground);
+  --color-status-unverified: var(--status-unverified);
+  --color-status-unverified-soft: var(--status-unverified-soft);
+  --color-status-unverified-foreground: var(--status-unverified-foreground);
+  --color-status-stale: var(--status-stale);
+  --color-status-stale-soft: var(--status-stale-soft);
+  --color-status-stale-foreground: var(--status-stale-foreground);
+  --color-status-failed: var(--status-failed);
+  --color-status-failed-soft: var(--status-failed-soft);
+  --color-status-failed-foreground: var(--status-failed-foreground);
+  --color-status-error: var(--status-error);
+  --color-status-error-soft: var(--status-error-soft);
+  --color-status-error-foreground: var(--status-error-foreground);
+
+  --color-delta-good: var(--delta-good);
+  --color-delta-bad: var(--delta-bad);
+  --color-delta-neutral: var(--delta-neutral);
+
+  --color-ref: var(--ref);
+  --color-ref-hover: var(--ref-hover);
+  --color-ref-highlight: var(--ref-highlight);
+
+  --color-hero-glass-tint: var(--hero-glass-tint);
+  --color-hero-glass-stroke: var(--hero-glass-stroke);
+  --color-avatar-sky: var(--avatar-sky);
+  --color-avatar-violet: var(--avatar-violet);
+  --color-avatar-teal: var(--avatar-teal);
+  --color-avatar-rose: var(--avatar-rose);
+  --color-avatar-amber: var(--avatar-amber);
+  --color-avatar-indigo: var(--avatar-indigo);
+  --color-avatar-foreground: var(--avatar-foreground);
+  --color-source-postgres: var(--source-postgres);
+  --color-source-mysql: var(--source-mysql);
+  --color-source-clickhouse: var(--source-clickhouse);
+  --color-source-snowflake: var(--source-snowflake);
+  --color-source-bigquery: var(--source-bigquery);
+  --color-source-foreground: var(--source-foreground);
+  --color-source-clickhouse-foreground: var(--source-clickhouse-foreground);
+
+  --color-diff-added: var(--diff-added);
+  --color-diff-removed: var(--diff-removed);
+
+  /* Type scale: the design's type/* variables. Only these named sizes are allowed in our code.
+     Weights here are defaults; font-normal / font-medium override them where the design does. */
+  --text-hero: 2.75rem; /* 44 */
+  --text-hero--line-height: 1.05;
+  --text-hero--font-weight: 600;
+  --text-hero--letter-spacing: -0.032em;
+  --text-number-xl: 2rem; /* 32 */
+  --text-number-xl--line-height: 2.5rem;
+  --text-number-xl--font-weight: 600;
+  --text-number-xl--letter-spacing: -0.025em;
+  --text-display: 1.75rem; /* 28 */
+  --text-display--line-height: 2.25rem;
+  --text-display--font-weight: 600;
+  --text-display--letter-spacing: -0.01em;
+  --text-number-lg: 1.5rem; /* 24 */
+  --text-number-lg--line-height: 2rem;
+  --text-number-lg--font-weight: 600;
+  --text-number-lg--letter-spacing: -0.025em;
+  --text-title: 1.25rem; /* 20 */
+  --text-title--line-height: 1.75rem;
+  --text-title--font-weight: 600;
+  --text-otp: 1.125rem; /* 18 */
+  --text-otp--line-height: 1.75rem;
+  --text-otp--font-weight: 500;
+  --text-heading: 0.9375rem; /* 15 */
+  --text-heading--line-height: 1.375rem;
+  --text-heading--font-weight: 600;
+  --text-lead: 0.875rem; /* 14: answer prose */
+  --text-lead--line-height: 1.375rem;
+  --text-body: 0.8125rem; /* 13 */
+  --text-body--line-height: 1.25rem;
+  --text-small: 0.75rem; /* 12 */
+  --text-small--line-height: 1rem;
+  --text-micro: 0.6875rem; /* 11 */
+  --text-micro--line-height: 0.875rem;
+  --text-code: 0.8125rem; /* 13: the code editor, a taller line so the gutter and marks align */
+  --text-code--line-height: 1.3125rem;
+  --code-mark-edge: 0.125rem; /* 2: the accent edge on a changed line */
+
+  /* Layout: the design's layout/* variables. */
+  --spacing-sheet-inset: 0.5rem; /* 8: gap around the inset content sheet */
+  --radius-sheet: 0.75rem; /* 12 */
+  --spacing-sidebar: 15rem; /* 240 */
+  --spacing-rail: 3.5rem; /* 56: the collapsed sidebar */
+  --spacing-inspector: 26.25rem; /* 420: the Sources panel, the analyst beside a page */
+  --spacing-inspector-wide: 40rem; /* 640: the same panel holding SQL, a trace or History */
+  --spacing-record-text: 15rem; /* 240: the widest a text cell of a list of records grows before it is cut short */
+  --spacing-side-pane: calc(100dvh - 6rem); /* a sticky side pane (the catalog's tables): the view less the top bar */
+  --spacing-auth-sheet: 37.5rem; /* 600: the form side of the auth screens */
+  --container-reading: 45rem; /* 720: answer and document width */
+  --container-form: 22.5rem; /* 360: auth and settings forms */
+  --container-wizard: 35rem; /* 560: the connect steps' column, with paired fields */
+  --breakpoint-hd: 90rem; /* 1440: the width the screens are designed at */
+
+  /* Auth hero glass cards: the one sanctioned soft shadow and blur outside overlays. */
+  --shadow-glass: 0 1.125rem 2.75rem var(--hero-shadow);
+  /* An App the agent is building: the light round its edge (its width, the mask that keeps it to the edge) and the
+     glow inside it (components.css .app-building). */
+  --build-ring-width: 1.5px;
+  --build-ring-mask: linear-gradient(#000 0 0);
+  --build-glow: inset 0 0 28px -10px color-mix(in oklab, var(--accent) 55%, transparent);
+  --blur-glass: 1.75rem;
+}
+
+@layer theme {
+  :root,
+  :host,
+  .light,
+  .dark,
+  [data-theme="light"],
+  [data-theme="dark"] {
+    /* Control sizes: the same numbers as the design theme's component rules (SM 24 / MD 28 / LG 32). */
+    --control-height-sm: 1.5rem;
+    --control-height-md: 1.75rem;
+    --control-height-lg: 2rem;
+    --control-padding-sm: 0.5rem;
+    --control-padding-md: 0.625rem;
+    --control-padding-lg: 0.75rem;
+    --control-gap: 0.25rem;
+    --control-font-sm: 0.75rem;
+    --control-font-md: 0.8125rem;
+    --control-icon-sm: 0.75rem;
+    --control-icon-md: 0.875rem;
+
+    /* A streaming answer: where the draft is being written, and how fast the current step shimmers. */
+    --draft-caret-width: 0.125rem;
+    --draft-caret-height: 1em;
+    --shimmer-duration: 1.8s;
+
+    /* Motion: how long things take and how they slow down, matching HeroUI's own overlays (150ms,
+       --ease-out). Reduced motion turns them all off (components.css). */
+    --motion-fast: 150ms; /* colour and background changes */
+    --motion-base: 200ms; /* something appearing, a section opening */
+    --motion-panel: 240ms; /* the sidebar and the analyst's panel changing width */
+    --motion-ease: var(--ease-out);
+    --motion-ease-panel: var(--ease-out-fluid);
+    --motion-rise: 0.25rem; /* how far an appearing thing rises */
+    --motion-stagger: 70ms; /* between blocks rising in turn (an App's blueprint) */
+    --app-working-edge: 2px; /* the light along an App's preview while the analyst works */
+    --motion-slide: 0.75rem; /* how far a pane slides in */
+
+    /* Verification (artifacts and answers): Unverified · In progress · Verified · Stale · Failed · Error. */
+    --status-verified: var(--success);
+    --status-verified-soft: var(--success-soft);
+    --status-verified-foreground: var(--success-soft-foreground);
+    --status-progress: var(--accent);
+    --status-progress-soft: var(--accent-soft);
+    --status-progress-foreground: var(--accent-soft-foreground);
+    --status-unverified: var(--muted);
+    --status-unverified-soft: var(--default);
+    --status-unverified-foreground: var(--muted);
+    --status-stale: var(--warning);
+    --status-stale-soft: var(--warning-soft);
+    --status-stale-foreground: var(--warning-soft-foreground);
+    --status-failed: var(--danger);
+    --status-failed-soft: var(--danger-soft);
+    --status-failed-foreground: var(--danger-soft-foreground);
+    --status-error: var(--danger);
+    --status-error-soft: var(--default);
+    --status-error-foreground: var(--danger-soft-foreground);
+
+    /* Deltas are coloured by the metric's direction (up_good / up_bad), never by sign alone. */
+    --delta-good: var(--success-soft-foreground);
+    --delta-bad: var(--danger-soft-foreground);
+    --delta-neutral: var(--muted);
+
+    /* Traced numbers: a value reference that opens the value trace. */
+    --ref: var(--link);
+    --ref-hover: var(--accent-hover);
+    --ref-highlight: var(--accent-soft);
+
+    --diff-added: var(--success-soft);
+    --diff-removed: var(--danger-soft);
+  }
+}

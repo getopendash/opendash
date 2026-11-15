@@ -1,0 +1,24 @@
+OpenDash
+Copyright (c) 2026 OpenDash
+
+This repository is licensed under the Apache License, Version 2.0 (see LICENSE), except the ee/ directory (see
+ee/LICENSE).
+
+Third-party material carried in this repository:
+
+- Fonts in packages/pdf/fonts: Geist (SIL Open Font License 1.1, see OFL-Geist.txt) and Noto Sans, Noto Emoji and
+  related Noto fonts (SIL Open Font License 1.1, see OFL-Noto.txt).
+- Icons: the GitHub, Google and envelope marks in packages/ui/src/icons/brand.tsx are paths from Phosphor Icons 2.1.1
+  (MIT License, see licenses/phosphor-icons.txt). The marks of the databases and services OpenDash connects to
+  (packages/ui/src/icons/sources.tsx, apps/web/public/brands.svg and packages/tokens/src/brand-marks.generated.ts, made
+  by packages/ui/scripts/build-brands.ts) are from Simple Icons 16.35.0 (CC0 1.0), except Slack's and Amazon
+  Redshift's, which, like the logos in apps/web/public/logos, are their owners' published logos. All of these are
+  their owners' trademarks, shown only to say which service or database a source is. All other icons come from the
+  Lucide package.
+- Pair, the animated character in packages/ui/vendor/pair, is trimmed from bot-avatars 0.2.2 by Jakub Antalik
+  (MIT License, see packages/ui/vendor/pair/LICENSE), with OpenDash's own additions.
+- The patterns that read a model provider's error text in packages/agent/src/harness/model-errors.ts are adapted from
+  pi-ai (MIT License, see licenses/pi-ai.txt).
+
+Dependencies are installed from their own packages under their own licenses. `pnpm licenses list` prints them, and
+`pnpm check:licenses` checks them against the policy in docs/operations/LICENSING.md.

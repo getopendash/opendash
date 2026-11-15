@@ -1,0 +1,6 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg xmlns="http://www.w3.org/2000/svg" width="100" height="100" viewBox="0 0 100 100" role="img" aria-label="OpenDash favicon">
+  <title>OpenDash favicon</title>
+  <style>path[data-opendash-favicon]{fill:#15171E}@media(prefers-color-scheme:dark){path[data-opendash-favicon]{fill:#A79AF4}}</style>
+  <path data-opendash-favicon="true" fill="#15171E" d="M27.9 29.8C27.9 20 45.7 10.3 62.3 6.8C79.4 3.4 84.5 11.5 87 18.8C91.7 35.3 79.4 44.3 66.2 43.9C56.4 43.9 44.9 41.7 36.8 40.5C30.9 39.6 27.9 36.2 27.9 29.8ZM10 73.3C10 61.4 20.2 50.7 33.4 51.1C43.6 51.1 67.9 53.2 78.1 57.5C87 60.9 90.4 65.2 90 72.8C89.6 86.9 65.7 94.1 43.6 93.7C23.6 93.3 10 87.7 10 73.3Z"/>
+</svg>

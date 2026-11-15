@@ -1,0 +1,1 @@
+CREATE INDEX "artifact_snapshot_runs_idx" ON "app"."artifact_snapshot" USING gin ("query_run_ids");

@@ -1,0 +1,39 @@
+{
+  "name": "@opendash/core",
+  "version": "0.0.0",
+  "private": true,
+  "license": "Apache-2.0",
+  "description": "Tenancy, context engine, semantic compiler, query gateway, proactive, learning, answer gate",
+  "type": "module",
+  "exports": {
+    ".": "./src/index.ts",
+    "./audit": "./src/audit/actions.ts",
+    "./clarify": "./src/runs/clarify.ts",
+    "./enterprise": "./src/enterprise/index.ts",
+    "./routines": "./src/routines/client.ts",
+    "./telemetry": "./src/ops/telemetry.ts",
+    "./testing": "./src/testing.ts"
+  },
+  "scripts": {
+    "typecheck": "tsc -p tsconfig.json",
+    "queue:install": "tsx scripts/install-queues.ts",
+    "test": "vitest run"
+  },
+  "dependencies": {
+    "@modelcontextprotocol/client": "2.3.1",
+    "@opendash/apps": "workspace:*",
+    "@opendash/connectors": "workspace:*",
+    "@opendash/db": "workspace:*",
+    "@opendash/evals": "workspace:*",
+    "@opentelemetry/api": "1.9.1",
+    "pg-boss": "12.37.0",
+    "unpdf": "^2.1.0",
+    "yaml": "2.8.4",
+    "zod": "4.6.6"
+  },
+  "devDependencies": {
+    "@modelcontextprotocol/server": "2.3.1",
+    "tsx": "4.23.15",
+    "vitest": "5.0.3"
+  }
+}

@@ -1,0 +1,1 @@
+ALTER TABLE "auth"."verification" ALTER COLUMN "id" SET DATA TYPE text;

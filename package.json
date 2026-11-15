@@ -1,0 +1,49 @@
+{
+  "name": "opendash",
+  "private": true,
+  "license": "Apache-2.0",
+  "packageManager": "pnpm@11.5.1",
+  "engines": {
+    "node": ">=24.11.0"
+  },
+  "scripts": {
+    "dev": "turbo run dev",
+    "build": "turbo run build",
+    "typecheck": "turbo run typecheck",
+    "test": "turbo run test",
+    "lint": "biome check .",
+    "lint:fix": "biome check --write .",
+    "e2e": "node scripts/e2e.mjs",
+    "check:links": "node scripts/check-links.mjs",
+    "check:licenses": "node scripts/check-licenses.mjs",
+    "check:notes": "node scripts/check-notes.mjs",
+    "email:logo": "node scripts/email-logo.mjs",
+    "license:keygen": "pnpm --filter @opendash/ee license:keygen",
+    "license:issue": "pnpm --filter @opendash/ee license:issue",
+    "audit:verify": "pnpm --silent --filter @opendash/ee audit:verify",
+    "sso:disable": "pnpm --silent --filter @opendash/ee sso:disable",
+    "slack:manifest": "node scripts/slack-manifest.mjs",
+    "slack:tunnel": "node scripts/slack-manifest.mjs --tunnel",
+    "dev:doctor": "node scripts/dev-doctor.mjs",
+    "db:up": "docker compose -f infra/docker-compose.yml up -d --wait",
+    "db:down": "docker compose -f infra/docker-compose.yml down",
+    "clickhouse:up": "docker compose -f infra/docker-compose.yml --profile clickhouse up -d --wait clickhouse",
+    "mysql:up": "docker compose -f infra/docker-compose.yml --profile mysql up -d --wait mysql",
+    "mail:up": "docker compose -f infra/docker-compose.yml --profile mail up -d --wait mailpit",
+    "dx": "node scripts/dev-doctor.mjs && pnpm install && pnpm db:up && pnpm db:bootstrap && pnpm db:migrate && pnpm dev",
+    "db:bootstrap": "pnpm --filter @opendash/db bootstrap",
+    "db:migrate": "pnpm --filter @opendash/db migrate && pnpm --filter @opendash/core queue:install",
+    "auth:repair": "pnpm --filter @opendash/auth repair",
+    "auth:two-factor-off": "pnpm --filter @opendash/auth two-factor-off",
+    "demo:seed": "pnpm --filter @opendash/evals demo:seed",
+    "ask": "pnpm --silent --filter @opendash/worker ask",
+    "golden": "pnpm --silent --filter @opendash/worker golden --set golden",
+    "evals": "pnpm --silent --filter @opendash/worker golden"
+  },
+  "devDependencies": {
+    "@biomejs/biome": "2.5.15",
+    "@types/node": "24.19.1",
+    "turbo": "2.11.7",
+    "typescript": "6.0.3"
+  }
+}

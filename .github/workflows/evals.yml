@@ -1,0 +1,82 @@
+# DashBench's PR subset (docs/evals/DASHBENCH.md): 10 stable, cheap questions asked of the real analyst and graded
+# against answers computed from the data, on a pull request that touches what decides an answer (prompts, tools,
+# retrieval, the compiler, the gateway, the answer gate). AGENTS.md asks that such a change keeps the subset green and
+# shows its score: this is that check, and its summary is the score. The whole set stays on demand (`pnpm evals`).
+#
+# It spends: Haiku, a few cents a run. It needs the repository secret ANTHROPIC_API_KEY; without it (a fork's pull
+# request never gets secrets) the run says so and passes, and a maintainer runs `pnpm evals --subset pr` by hand.
+name: Evals
+
+on:
+  pull_request:
+    paths:
+      - "packages/agent/**"
+      - "packages/core/src/**"
+      - "packages/connectors/src/**"
+      - "packages/evals/**"
+      - "apps/worker/scripts/golden.ts"
+      - ".github/workflows/evals.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+# A newer push to the same pull request replaces the run before it: only the latest commit's score matters.
+concurrency:
+  group: evals-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  pr-subset:
+    name: DashBench (PR subset)
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    services:
+      postgres:
+        image: pgvector/pgvector:pg18
+        env:
+          POSTGRES_USER: opendash_owner
+          POSTGRES_PASSWORD: opendash
+          POSTGRES_DB: opendash
+        ports:
+          - 5444:5432
+        options: >-
+          --health-cmd "pg_isready -U opendash_owner -d opendash"
+          --health-interval 5s --health-timeout 5s --health-retries 20
+    env:
+      TEST_DATABASE_ADMIN_URL: postgres://opendash_owner:opendash@127.0.0.1:5444/postgres
+      ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+    steps:
+      - id: key
+        name: Is there a model key?
+        run: |
+          if [ -n "$ANTHROPIC_API_KEY" ]; then
+            echo "present=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "present=false" >> "$GITHUB_OUTPUT"
+            echo "::notice::No ANTHROPIC_API_KEY here (a fork, or the secret isn't set): the PR subset wasn't asked. A maintainer runs \`pnpm evals --subset pr\`."
+          fi
+      - uses: actions/checkout@v4
+        if: steps.key.outputs.present == 'true'
+      - uses: actions/setup-node@v4
+        if: steps.key.outputs.present == 'true'
+        with:
+          node-version-file: .nvmrc
+      - if: steps.key.outputs.present == 'true'
+        run: corepack enable
+      - if: steps.key.outputs.present == 'true'
+        run: pnpm install --frozen-lockfile
+      - name: Ask the PR subset (fails under the bar: an untraced number, or fewer than 75% right)
+        if: steps.key.outputs.present == 'true'
+        run: |
+          set -o pipefail
+          pnpm evals --subset pr 2>&1 | tee evals.log
+      - name: The score, on the run's summary
+        if: always() && steps.key.outputs.present == 'true'
+        run: |
+          {
+            echo "### DashBench, PR subset"
+            echo '```'
+            tail -n 25 evals.log 2>/dev/null || echo "The run didn't get as far as asking."
+            echo '```'
+          } >> "$GITHUB_STEP_SUMMARY"

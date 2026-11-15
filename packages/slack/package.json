@@ -1,0 +1,30 @@
+{
+  "name": "@opendash/slack",
+  "version": "0.0.0",
+  "private": true,
+  "license": "Apache-2.0",
+  "description": "OpenDash in Slack: the Chat SDK bot, its handlers, the run streamed as a reply, and the file reader",
+  "type": "module",
+  "exports": {
+    ".": "./src/index.ts"
+  },
+  "scripts": {
+    "typecheck": "tsc -p tsconfig.json",
+    "test": "vitest run"
+  },
+  "dependencies": {
+    "@chat-adapter/slack": "4.41.0",
+    "@chat-adapter/state-pg": "4.41.0",
+    "@slack/socket-mode": "2.0.7",
+    "@opendash/core": "workspace:*",
+    "@opendash/db": "workspace:*",
+    "@opendash/markdown": "workspace:*",
+    "@opendash/pdf": "workspace:*",
+    "chat": "4.41.0",
+    "pg-boss": "12.37.0"
+  },
+  "devDependencies": {
+    "@chat-adapter/state-memory": "4.41.0",
+    "vitest": "5.0.3"
+  }
+}

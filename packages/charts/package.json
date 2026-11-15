@@ -1,0 +1,22 @@
+{
+  "name": "@opendash/charts",
+  "version": "0.0.0",
+  "private": true,
+  "license": "Apache-2.0",
+  "description": "How a chart looks: ECharts options from the theme tokens, one drawing for the page, PDFs and Slack's chart images",
+  "type": "module",
+  "exports": {
+    ".": "./src/index.ts"
+  },
+  "scripts": {
+    "typecheck": "tsc -p tsconfig.json",
+    "test": "vitest run"
+  },
+  "dependencies": {
+    "@opendash/tokens": "workspace:*",
+    "echarts": "6.1.0"
+  },
+  "devDependencies": {
+    "vitest": "5.0.3"
+  }
+}

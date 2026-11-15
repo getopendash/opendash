@@ -1,0 +1,40 @@
+{
+  "name": "@opendash/auth",
+  "version": "0.0.0",
+  "private": true,
+  "license": "Apache-2.0",
+  "description": "Better Auth configuration: sessions, organizations, teams, API keys, tenant context",
+  "type": "module",
+  "exports": {
+    ".": "./src/index.ts",
+    "./client": "./src/client.ts",
+    "./routes": "./src/routes.ts"
+  },
+  "scripts": {
+    "generate:schema": "auth generate --config src/auth-config.ts --output ../db/src/schema/auth.generated.ts --yes",
+    "test": "vitest run",
+    "typecheck": "tsc -p tsconfig.json",
+    "repair": "tsx scripts/repair.ts",
+    "two-factor-off": "tsx scripts/two-factor-off.ts"
+  },
+  "dependencies": {
+    "@better-auth/api-key": "1.7.7",
+    "@better-auth/core": "1.7.7",
+    "@better-auth/drizzle-adapter": "1.7.7",
+    "@opendash/core": "workspace:*",
+    "@opendash/db": "workspace:*",
+    "@opendash/email": "workspace:*",
+    "better-auth": "1.7.7",
+    "drizzle-orm": "0.45.3"
+  },
+  "devDependencies": {
+    "@types/react": "19.3.0",
+    "auth": "1.7.7",
+    "tsx": "4.23.15",
+    "vitest": "5.0.3"
+  },
+  "peerDependencies": {
+    "next": "^16.0.0",
+    "react": "^19.2.0"
+  }
+}

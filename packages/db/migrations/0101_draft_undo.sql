@@ -1,0 +1,1 @@
+ALTER TABLE "app"."dashboard_draft" ADD COLUMN "undo" jsonb;

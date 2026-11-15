@@ -1,0 +1,10 @@
+engine biome(1.0)
+language css
+
+CssGenericProperty() as $decl where {
+  $decl <: r"(?s).*(?:#[0-9a-fA-F]{3,8}\b|\b[0-9.]+(?:px|rem|em)\b|\brgba?\(|\bhsla?\(|\boklch\().*",
+  register_diagnostic(
+    span = $decl,
+    message = "No literal values outside the theme files (packages/ui/src/styles/opendash-theme.css, packages/ui/src/styles/tokens.css). Reference a token with var()."
+  )
+}

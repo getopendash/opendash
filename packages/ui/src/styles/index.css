@@ -1,0 +1,12 @@
+/* OpenDash styles entry point. Apps import this one file: @import "@opendash/ui/styles.css". */
+@import "tailwindcss";
+@import "@heroui/styles";
+
+/* Design-owned theme: colours, radii, density. The single source of visual values. */
+@import "./opendash-theme.css";
+
+/* Product meanings, control tokens and the type scale: references to the design theme only. */
+@import "./tokens.css";
+@import "./components.css";
+
+@source "../";

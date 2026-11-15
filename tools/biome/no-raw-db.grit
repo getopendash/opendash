@@ -1,0 +1,10 @@
+engine biome(1.0)
+language js(typescript, jsx)
+
+or { `import $_ from $source`, `import { $_ } from $source`, `import * as $_ from $source` } as $import where {
+  $source <: or { `"postgres"`, `"drizzle-orm/postgres-js"`, `"pg"` },
+  register_diagnostic(
+    span = $import,
+    message = "App database access goes through @opendash/db (withTenant / withSystem). Raw drivers are allowed only in packages/db, and in packages/connectors and packages/evals for customer warehouses and the demo database."
+  )
+}

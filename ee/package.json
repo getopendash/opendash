@@ -1,0 +1,38 @@
+{
+  "name": "@opendash/ee",
+  "version": "0.0.0",
+  "private": true,
+  "description": "OpenDash's enterprise features, source-available under the OCVSAL (see LICENSE): the license gate, the audit chain, single sign-on and directory sync",
+  "license": "SEE LICENSE IN LICENSE",
+  "type": "module",
+  "exports": {
+    "./audit": "./src/audit/index.ts",
+    "./license": "./src/license/index.ts",
+    "./scim": "./src/scim/index.ts",
+    "./sso": "./src/sso/index.ts"
+  },
+  "scripts": {
+    "typecheck": "tsc -p tsconfig.json",
+    "test": "vitest run",
+    "license:keygen": "tsx scripts/license.ts keygen",
+    "license:issue": "tsx scripts/license.ts issue",
+    "audit:verify": "tsx scripts/audit.ts",
+    "sso:disable": "tsx scripts/sso.ts",
+    "keycloak:check": "sh scripts/keycloak-check.sh"
+  },
+  "dependencies": {
+    "@better-auth/core": "1.7.7",
+    "@better-auth/scim": "1.7.7",
+    "@better-auth/sso": "1.7.7",
+    "@opendash/auth": "workspace:*",
+    "@opendash/connectors": "workspace:*",
+    "@opendash/core": "workspace:*",
+    "@opendash/db": "workspace:*",
+    "better-auth": "1.7.7",
+    "drizzle-orm": "0.45.3"
+  },
+  "devDependencies": {
+    "tsx": "4.23.15",
+    "vitest": "5.0.3"
+  }
+}

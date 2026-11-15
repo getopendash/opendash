@@ -1,0 +1,1 @@
+DROP INDEX "app"."dashboard_version_revision_uq";

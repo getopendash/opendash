@@ -1,0 +1,10 @@
+# Only for infra/selfhost-smoke.sh: a Mailpit sink the stack sends its email to over SMTP. It relays nothing; its API
+# (loopback only) lets the smoke test see that a sign-up email arrived.
+services:
+  mailpit:
+    image: axllent/mailpit:v1.31.2
+    ports:
+      - "127.0.0.1:${SMOKE_MAILPIT_PORT:-8725}:8025"
+  web:
+    depends_on:
+      mailpit: { condition: service_started }

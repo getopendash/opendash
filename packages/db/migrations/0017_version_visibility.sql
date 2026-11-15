@@ -1,0 +1,3 @@
+ALTER POLICY "tenant" ON "app"."context_item_version" TO opendash_app USING (org_id = (select app.org_id()) and exists (
+  select 1 from app.context_item i where i.org_id = context_item_version.org_id and i.id = context_item_version.item_id)) WITH CHECK (org_id = (select app.org_id()) and exists (
+  select 1 from app.context_item i where i.org_id = context_item_version.org_id and i.id = context_item_version.item_id));

@@ -1,0 +1,1 @@
+ALTER TABLE "app"."slack_reply" ADD COLUMN "slack_message_ts" text;

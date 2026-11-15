@@ -1,0 +1,2 @@
+DROP INDEX "app"."dashboard_version_revision_uq";--> statement-breakpoint
+CREATE UNIQUE INDEX "dashboard_version_revision_uq" ON "app"."dashboard_version" USING btree ("org_id","dashboard_id","revision");

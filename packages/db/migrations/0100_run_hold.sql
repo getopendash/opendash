@@ -1,0 +1,1 @@
+ALTER TABLE "app"."run" ADD COLUMN "hold_usd" numeric(12, 2);

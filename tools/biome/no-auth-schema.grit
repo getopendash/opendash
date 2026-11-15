@@ -1,0 +1,10 @@
+engine biome(1.0)
+language js(typescript, jsx)
+
+or { `import $_ from $source`, `import { $_ } from $source`, `import * as $_ from $source`, `export { $_ } from $source` } as $import where {
+  $source <: `"@opendash/db/auth"`,
+  register_diagnostic(
+    span = $import,
+    message = "App code never reads the auth schema (AGENTS.md): the auth tables and their connection are packages/auth's. Use @opendash/auth's functions, and its getAuthDatabase to pass them the handle."
+  )
+}

@@ -1,0 +1,10 @@
+engine biome(1.0)
+language js(typescript, jsx)
+
+JsxAttribute($name, $value) as $attr where {
+  $name <: "style",
+  register_diagnostic(
+    span = $attr,
+    message = "No inline styles. Use theme tokens through classes; runtime geometry belongs in a packages/ui primitive as a CSS variable."
+  )
+}

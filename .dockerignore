@@ -1,0 +1,38 @@
+# The images' build context: sources, the lockfile and the workspace config. Never local settings or secrets, never
+# local builds or dependencies (each image installs its own), never docs or design files.
+
+# Settings and secrets
+.env
+.env.*
+**/.env
+**/.env.*
+
+# Dependencies and builds
+**/node_modules
+**/.next
+**/.turbo
+**/dist
+**/coverage
+**/*.tsbuildinfo
+**/next-env.d.ts
+
+# Tests' output and local data
+**/test-results
+**/playwright-report
+**/.data
+packages/evals/reports
+
+# Repository, tools and editors
+.git
+.github
+.claude
+.codegraph
+.playwright-mcp
+.vscode
+.idea
+**/.DS_Store
+
+# Docs and private notes aren't needed to build the images
+docs/**
+internal
+CLAUDE.md

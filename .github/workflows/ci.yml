@@ -1,0 +1,127 @@
+name: CI
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+jobs:
+  # Lint, types, licences, the build and docs links: no database.
+  check:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version-file: .nvmrc
+      - run: corepack enable
+      - run: pnpm install --frozen-lockfile
+      - name: Lint and format (Biome, including design-system and raw-db rules)
+        run: pnpm lint
+      - name: Typecheck
+        run: pnpm typecheck
+      - name: Licenses (every dependency against the policy)
+        run: pnpm check:licenses
+      - name: Build
+        run: pnpm build
+      - name: Docs links
+        run: pnpm check:links
+      - name: No private notes in the code (who, when, or a private document's number)
+        run: pnpm check:notes
+
+  # The tests, in three jobs side by side: core and agent are most of the time between them (each against its own
+  # Postgres), the other packages together. One after another they took 18 minutes.
+  test:
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - name: core
+            filter: --filter=@opendash/core
+          - name: agent
+            filter: --filter=@opendash/agent
+          - name: the rest
+            filter: --filter=!@opendash/core --filter=!@opendash/agent
+    name: Tests (${{ matrix.name }})
+    services:
+      postgres:
+        image: pgvector/pgvector:pg18
+        env:
+          POSTGRES_USER: opendash_owner
+          POSTGRES_PASSWORD: opendash
+          POSTGRES_DB: opendash
+        ports:
+          - 5444:5432
+        options: >-
+          --health-cmd "pg_isready -U opendash_owner -d opendash"
+          --health-interval 5s --health-timeout 5s --health-retries 20
+    env:
+      TEST_DATABASE_ADMIN_URL: postgres://opendash_owner:opendash@127.0.0.1:5444/postgres
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version-file: .nvmrc
+      - run: corepack enable
+      - run: pnpm install --frozen-lockfile
+      - name: Unit and tenancy tests (theme contrast, token freshness, RLS suite, partitions)
+        run: pnpm turbo run test ${{ matrix.filter }}
+
+  # The end-to-end browser tests (apps/web/e2e): a stranger's first hour in Chromium, against the web app and a worker
+  # started on a database of their own (scripts/e2e.mjs), with a mail sink for the sign-up link. No model key: the
+  # test that asks a question is skipped.
+  e2e:
+    name: End-to-end (browser)
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    services:
+      postgres:
+        image: pgvector/pgvector:pg18
+        env:
+          POSTGRES_USER: opendash_owner
+          POSTGRES_PASSWORD: opendash
+          POSTGRES_DB: opendash
+        ports:
+          - 5444:5432
+        options: >-
+          --health-cmd "pg_isready -U opendash_owner -d opendash"
+          --health-interval 5s --health-timeout 5s --health-retries 20
+      mailpit:
+        image: axllent/mailpit:v1.31.2
+        ports:
+          - 1027:1025
+          - 8027:8025
+    env:
+      # As .env.example has them: the roles are made with the local password on this fresh server.
+      DATABASE_URL: postgres://opendash_app:opendash@127.0.0.1:5444/opendash
+      DATABASE_SYSTEM_URL: postgres://opendash_system:opendash@127.0.0.1:5444/opendash
+      DATABASE_AUTH_URL: postgres://opendash_auth:opendash@127.0.0.1:5444/opendash
+      DATABASE_OWNER_URL: postgres://opendash_owner:opendash@127.0.0.1:5444/opendash
+      DATABASE_DIRECT_URL: postgres://opendash_app:opendash@127.0.0.1:5444/opendash
+      DATABASE_QUEUE_URL: postgres://opendash_queue:opendash@127.0.0.1:5444/opendash
+      E2E_ADMIN_URL: postgres://opendash_owner:opendash@127.0.0.1:5444/postgres
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version-file: .nvmrc
+      - run: corepack enable
+      - run: pnpm install --frozen-lockfile
+      - name: Chromium, and what it needs from the system
+        run: pnpm --filter @opendash/web exec playwright install --with-deps chromium
+      - name: Keys for this run only
+        run: |
+          echo "BETTER_AUTH_SECRET=$(openssl rand -base64 32)" >> "$GITHUB_ENV"
+          echo "OPENDASH_KEK=$(openssl rand -base64 32)" >> "$GITHUB_ENV"
+      - name: Sign up, create a workspace, connect a source
+        run: pnpm e2e
+      - name: Keep the traces of a failed run
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: e2e-results
+          path: |
+            apps/web/test-results
+            apps/web/playwright-report
+          retention-days: 7

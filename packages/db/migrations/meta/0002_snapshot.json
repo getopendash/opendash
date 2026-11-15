@@ -1,0 +1,570 @@
+{
+  "id": "954ba72c-5c10-421d-a761-b88054999ab5",
+  "prevId": "846001ca-37b1-49dd-86dd-a681d89fc369",
+  "version": "7",
+  "dialect": "postgresql",
+  "tables": {
+    "app.entitlement": {
+      "name": "entitlement",
+      "schema": "app",
+      "columns": {
+        "org_id": {
+          "name": "org_id",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "key": {
+          "name": "key",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "value": {
+          "name": "value",
+          "type": "jsonb",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "source": {
+          "name": "source",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "'plan'"
+        },
+        "valid_until": {
+          "name": "valid_until",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "created_at": {
+          "name": "created_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "now()"
+        },
+        "updated_at": {
+          "name": "updated_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "now()"
+        }
+      },
+      "indexes": {},
+      "foreignKeys": {
+        "entitlement_org_id_org_id_fk": {
+          "name": "entitlement_org_id_org_id_fk",
+          "tableFrom": "entitlement",
+          "columnsFrom": [
+            "org_id"
+          ],
+          "tableTo": "org",
+          "schemaTo": "app",
+          "columnsTo": [
+            "id"
+          ],
+          "onUpdate": "no action",
+          "onDelete": "cascade"
+        }
+      },
+      "compositePrimaryKeys": {
+        "entitlement_org_id_key_pk": {
+          "name": "entitlement_org_id_key_pk",
+          "columns": [
+            "org_id",
+            "key"
+          ]
+        }
+      },
+      "uniqueConstraints": {},
+      "policies": {
+        "tenant": {
+          "name": "tenant",
+          "as": "PERMISSIVE",
+          "for": "ALL",
+          "to": [
+            "opendash_app"
+          ],
+          "using": "org_id = (select app.org_id())",
+          "withCheck": "org_id = (select app.org_id())"
+        },
+        "system": {
+          "name": "system",
+          "as": "PERMISSIVE",
+          "for": "ALL",
+          "to": [
+            "opendash_system"
+          ],
+          "using": "true",
+          "withCheck": "true"
+        }
+      },
+      "checkConstraints": {
+        "entitlement_source_check": {
+          "name": "entitlement_source_check",
+          "value": "\"app\".\"entitlement\".\"source\" in ('plan', 'override', 'license')"
+        }
+      },
+      "isRLSEnabled": true
+    },
+    "app.member_pref": {
+      "name": "member_pref",
+      "schema": "app",
+      "columns": {
+        "org_id": {
+          "name": "org_id",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "user_id": {
+          "name": "user_id",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "tz": {
+          "name": "tz",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "'UTC'"
+        },
+        "push_budget_per_day": {
+          "name": "push_budget_per_day",
+          "type": "smallint",
+          "primaryKey": false,
+          "notNull": true,
+          "default": 1
+        },
+        "push_budget_per_week": {
+          "name": "push_budget_per_week",
+          "type": "smallint",
+          "primaryKey": false,
+          "notNull": true,
+          "default": 3
+        },
+        "quiet_hours": {
+          "name": "quiet_hours",
+          "type": "jsonb",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "min_push_severity": {
+          "name": "min_push_severity",
+          "type": "smallint",
+          "primaryKey": false,
+          "notNull": true,
+          "default": 3
+        },
+        "digest_rrule": {
+          "name": "digest_rrule",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "next_digest_at": {
+          "name": "next_digest_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "created_at": {
+          "name": "created_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "now()"
+        },
+        "updated_at": {
+          "name": "updated_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "now()"
+        }
+      },
+      "indexes": {},
+      "foreignKeys": {
+        "member_pref_org_id_org_id_fk": {
+          "name": "member_pref_org_id_org_id_fk",
+          "tableFrom": "member_pref",
+          "columnsFrom": [
+            "org_id"
+          ],
+          "tableTo": "org",
+          "schemaTo": "app",
+          "columnsTo": [
+            "id"
+          ],
+          "onUpdate": "no action",
+          "onDelete": "cascade"
+        }
+      },
+      "compositePrimaryKeys": {
+        "member_pref_org_id_user_id_pk": {
+          "name": "member_pref_org_id_user_id_pk",
+          "columns": [
+            "org_id",
+            "user_id"
+          ]
+        }
+      },
+      "uniqueConstraints": {},
+      "policies": {
+        "tenant": {
+          "name": "tenant",
+          "as": "PERMISSIVE",
+          "for": "ALL",
+          "to": [
+            "opendash_app"
+          ],
+          "using": "org_id = (select app.org_id())",
+          "withCheck": "org_id = (select app.org_id())"
+        },
+        "system": {
+          "name": "system",
+          "as": "PERMISSIVE",
+          "for": "ALL",
+          "to": [
+            "opendash_system"
+          ],
+          "using": "true",
+          "withCheck": "true"
+        }
+      },
+      "checkConstraints": {},
+      "isRLSEnabled": true
+    },
+    "app.org": {
+      "name": "org",
+      "schema": "app",
+      "columns": {
+        "id": {
+          "name": "id",
+          "type": "uuid",
+          "primaryKey": true,
+          "notNull": true
+        },
+        "name": {
+          "name": "name",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "plan": {
+          "name": "plan",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "'free'"
+        },
+        "status": {
+          "name": "status",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "'active'"
+        },
+        "region": {
+          "name": "region",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "settings": {
+          "name": "settings",
+          "type": "jsonb",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "'{}'::jsonb"
+        },
+        "billing_ref": {
+          "name": "billing_ref",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "created_at": {
+          "name": "created_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "now()"
+        },
+        "updated_at": {
+          "name": "updated_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "now()"
+        }
+      },
+      "indexes": {},
+      "foreignKeys": {},
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {},
+      "policies": {
+        "tenant": {
+          "name": "tenant",
+          "as": "PERMISSIVE",
+          "for": "ALL",
+          "to": [
+            "opendash_app"
+          ],
+          "using": "id = (select app.org_id())",
+          "withCheck": "id = (select app.org_id())"
+        },
+        "system": {
+          "name": "system",
+          "as": "PERMISSIVE",
+          "for": "ALL",
+          "to": [
+            "opendash_system"
+          ],
+          "using": "true",
+          "withCheck": "true"
+        }
+      },
+      "checkConstraints": {
+        "org_status_check": {
+          "name": "org_status_check",
+          "value": "\"app\".\"org\".\"status\" in ('active', 'suspended', 'deleting')"
+        }
+      },
+      "isRLSEnabled": true
+    },
+    "app.org_key": {
+      "name": "org_key",
+      "schema": "app",
+      "columns": {
+        "org_id": {
+          "name": "org_id",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "version": {
+          "name": "version",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "wrapped_dek": {
+          "name": "wrapped_dek",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "kek_ref": {
+          "name": "kek_ref",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "state": {
+          "name": "state",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "'active'"
+        },
+        "created_at": {
+          "name": "created_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "now()"
+        },
+        "updated_at": {
+          "name": "updated_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "now()"
+        }
+      },
+      "indexes": {},
+      "foreignKeys": {
+        "org_key_org_id_org_id_fk": {
+          "name": "org_key_org_id_org_id_fk",
+          "tableFrom": "org_key",
+          "columnsFrom": [
+            "org_id"
+          ],
+          "tableTo": "org",
+          "schemaTo": "app",
+          "columnsTo": [
+            "id"
+          ],
+          "onUpdate": "no action",
+          "onDelete": "cascade"
+        }
+      },
+      "compositePrimaryKeys": {
+        "org_key_org_id_version_pk": {
+          "name": "org_key_org_id_version_pk",
+          "columns": [
+            "org_id",
+            "version"
+          ]
+        }
+      },
+      "uniqueConstraints": {},
+      "policies": {
+        "tenant": {
+          "name": "tenant",
+          "as": "PERMISSIVE",
+          "for": "ALL",
+          "to": [
+            "opendash_app"
+          ],
+          "using": "org_id = (select app.org_id())",
+          "withCheck": "org_id = (select app.org_id())"
+        },
+        "system": {
+          "name": "system",
+          "as": "PERMISSIVE",
+          "for": "ALL",
+          "to": [
+            "opendash_system"
+          ],
+          "using": "true",
+          "withCheck": "true"
+        }
+      },
+      "checkConstraints": {
+        "org_key_state_check": {
+          "name": "org_key_state_check",
+          "value": "\"app\".\"org_key\".\"state\" in ('active', 'retired', 'destroyed')"
+        }
+      },
+      "isRLSEnabled": true
+    },
+    "app.user_mark": {
+      "name": "user_mark",
+      "schema": "app",
+      "columns": {
+        "org_id": {
+          "name": "org_id",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "user_id": {
+          "name": "user_id",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "target_type": {
+          "name": "target_type",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "target_id": {
+          "name": "target_id",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "mark": {
+          "name": "mark",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "until_at": {
+          "name": "until_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "created_at": {
+          "name": "created_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "now()"
+        }
+      },
+      "indexes": {},
+      "foreignKeys": {
+        "user_mark_org_id_org_id_fk": {
+          "name": "user_mark_org_id_org_id_fk",
+          "tableFrom": "user_mark",
+          "columnsFrom": [
+            "org_id"
+          ],
+          "tableTo": "org",
+          "schemaTo": "app",
+          "columnsTo": [
+            "id"
+          ],
+          "onUpdate": "no action",
+          "onDelete": "cascade"
+        }
+      },
+      "compositePrimaryKeys": {
+        "user_mark_org_id_user_id_target_type_target_id_mark_pk": {
+          "name": "user_mark_org_id_user_id_target_type_target_id_mark_pk",
+          "columns": [
+            "org_id",
+            "user_id",
+            "target_type",
+            "target_id",
+            "mark"
+          ]
+        }
+      },
+      "uniqueConstraints": {},
+      "policies": {
+        "tenant": {
+          "name": "tenant",
+          "as": "PERMISSIVE",
+          "for": "ALL",
+          "to": [
+            "opendash_app"
+          ],
+          "using": "org_id = (select app.org_id())",
+          "withCheck": "org_id = (select app.org_id())"
+        },
+        "system": {
+          "name": "system",
+          "as": "PERMISSIVE",
+          "for": "ALL",
+          "to": [
+            "opendash_system"
+          ],
+          "using": "true",
+          "withCheck": "true"
+        }
+      },
+      "checkConstraints": {
+        "user_mark_mark_check": {
+          "name": "user_mark_mark_check",
+          "value": "\"app\".\"user_mark\".\"mark\" in ('favorite', 'seen', 'dismissed', 'snoozed')"
+        }
+      },
+      "isRLSEnabled": true
+    }
+  },
+  "enums": {},
+  "schemas": {
+    "app": "app"
+  },
+  "views": {},
+  "sequences": {},
+  "roles": {},
+  "policies": {},
+  "_meta": {
+    "columns": {},
+    "schemas": {},
+    "tables": {}
+  }
+}

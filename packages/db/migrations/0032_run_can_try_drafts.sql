@@ -1,0 +1,1 @@
+ALTER TABLE "app"."run" ADD COLUMN "can_try_drafts" boolean DEFAULT false NOT NULL;

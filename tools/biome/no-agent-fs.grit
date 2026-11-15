@@ -1,0 +1,10 @@
+engine biome(1.0)
+language js(typescript, jsx)
+
+or { `import $_ from $source`, `import { $_ } from $source`, `import * as $_ from $source` } as $import where {
+  $source <: or { `"fs"`, `"node:fs"`, `"fs/promises"`, `"node:fs/promises"`, `"child_process"`, `"node:child_process"` },
+  register_diagnostic(
+    span = $import,
+    message = "The agent reads and runs nothing on the host (AGENTS.md): no file system or child processes in packages/agent. Its tools reach data through @opendash/core."
+  )
+}

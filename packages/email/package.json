@@ -1,0 +1,23 @@
+{
+  "name": "@opendash/email",
+  "version": "0.0.0",
+  "private": true,
+  "license": "Apache-2.0",
+  "description": "Transactional email: email-safe templates coloured from the design tokens, and the Resend sender",
+  "type": "module",
+  "exports": {
+    ".": "./src/index.ts"
+  },
+  "scripts": {
+    "typecheck": "tsc -p tsconfig.json",
+    "test": "vitest run"
+  },
+  "dependencies": {
+    "@opendash/tokens": "workspace:*",
+    "nodemailer": "10.1.4",
+    "resend": "6.28.1"
+  },
+  "devDependencies": {
+    "vitest": "5.0.3"
+  }
+}

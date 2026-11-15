@@ -1,0 +1,142 @@
+# Self-host, single node (docs/operations/HOSTING.md): web, worker and Postgres, on this machine.
+#   cp infra/selfhost.env.example .env    # then fill it in
+#   docker compose up -d                  # builds the images the first time
+# Sign-in needs HTTPS: run your own proxy with TLS in front of 127.0.0.1:3000, or add `--profile caddy` for one here
+# (a certificate for OPENDASH_DOMAIN from Let's Encrypt; for `localhost`, Caddy's own).
+# `setup` runs first, once per `up`: it creates the roles, schemas and extensions, applies the migrations and installs
+# the queues; web and worker start after it succeeds. Development uses infra/docker-compose.yml instead (pnpm db:up).
+name: opendash-selfhost
+
+x-database: &database
+  # Postgres runs next to the app, so connections are direct (no transaction pooler).
+  DATABASE_POOLED: "false"
+  DATABASE_URL: postgres://opendash_app:${OPENDASH_DB_APP_PASSWORD:?set OPENDASH_DB_APP_PASSWORD}@postgres:5432/opendash
+  DATABASE_SYSTEM_URL: postgres://opendash_system:${OPENDASH_DB_SYSTEM_PASSWORD:?set OPENDASH_DB_SYSTEM_PASSWORD}@postgres:5432/opendash
+  DATABASE_AUTH_URL: postgres://opendash_auth:${OPENDASH_DB_AUTH_PASSWORD:?set OPENDASH_DB_AUTH_PASSWORD}@postgres:5432/opendash
+  DATABASE_QUEUE_URL: postgres://opendash_queue:${OPENDASH_DB_QUEUE_PASSWORD:?set OPENDASH_DB_QUEUE_PASSWORD}@postgres:5432/opendash
+  DATABASE_DIRECT_URL: postgres://opendash_app:${OPENDASH_DB_APP_PASSWORD}@postgres:5432/opendash
+
+x-app: &app
+  <<: *database
+  OPENDASH_KEK: ${OPENDASH_KEK:?set OPENDASH_KEK (openssl rand -base64 32), and back it up}
+  BETTER_AUTH_SECRET: ${BETTER_AUTH_SECRET:?set BETTER_AUTH_SECRET (openssl rand -base64 32)}
+  # HTTPS origins: production sign-in refuses anything else (with the caddy profile, https://<OPENDASH_DOMAIN>).
+  BETTER_AUTH_URL: ${BETTER_AUTH_URL:?set BETTER_AUTH_URL (the HTTPS address people open)}
+  BETTER_AUTH_TRUSTED_ORIGINS: ${BETTER_AUTH_TRUSTED_ORIGINS:?set BETTER_AUTH_TRUSTED_ORIGINS (exact HTTPS origins)}
+  # Where dashboards are drawn: an HTTPS origin of its own, pointed at the web app (with the caddy profile,
+  # https://frames.<OPENDASH_DOMAIN>). Without it, dashboards can't open.
+  OPENDASH_FRAMES_URL: ${OPENDASH_FRAMES_URL:-}
+  # Email: EMAIL_FROM, and Resend's key or an SMTP server's URL (Resend wins when both are set).
+  EMAIL_FROM: ${EMAIL_FROM:-}
+  RESEND_API_KEY: ${RESEND_API_KEY:-}
+  SMTP_URL: ${SMTP_URL:-}
+  AI_GATEWAY_API_KEY: ${AI_GATEWAY_API_KEY:-}
+  ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY:-}
+  OPENAI_API_KEY: ${OPENAI_API_KEY:-}
+  GOOGLE_GENERATIVE_AI_API_KEY: ${GOOGLE_GENERATIVE_AI_API_KEY:-}
+  OPENDASH_EDITION: ${OPENDASH_EDITION:-community}
+  OPENDASH_INVITE_ONLY: ${OPENDASH_INVITE_ONLY:-1}
+  # The Enterprise license (optional; ee/README.md), checked offline.
+  OPENDASH_LICENSE_KEY: ${OPENDASH_LICENSE_KEY:-}
+  OPENDASH_AUDIT_RETENTION_DAYS: ${OPENDASH_AUDIT_RETENTION_DAYS:-}
+  OPENDASH_SSO_MAX_AUTH_AGE_HOURS: ${OPENDASH_SSO_MAX_AUTH_AGE_HOURS:-}
+  OPENDASH_SSO_TRUSTED_IDP_ORIGINS: ${OPENDASH_SSO_TRUSTED_IDP_ORIGINS:-}
+  OPENDASH_TRUSTED_PROXIES: ${OPENDASH_TRUSTED_PROXIES:-}
+  OPENDASH_CLIENT_IP_HEADERS: ${OPENDASH_CLIENT_IP_HEADERS:-}
+  # Optional links: the terms line and footer on the auth screens, and where people get help (HOSTING.md).
+  OPENDASH_TERMS_URL: ${OPENDASH_TERMS_URL:-}
+  OPENDASH_PRIVACY_URL: ${OPENDASH_PRIVACY_URL:-}
+  OPENDASH_SECURITY_URL: ${OPENDASH_SECURITY_URL:-}
+  OPENDASH_SUPPORT_EMAIL: ${OPENDASH_SUPPORT_EMAIL:-}
+  OPENDASH_DOCS_URL: ${OPENDASH_DOCS_URL:-}
+  OPENDASH_STATUS_URL: ${OPENDASH_STATUS_URL:-}
+  OTEL_EXPORTER_OTLP_ENDPOINT: ${OTEL_EXPORTER_OTLP_ENDPOINT:-}
+  # Slack (optional; `pnpm slack:manifest https://<address> --socket`): Add to Slack, events over the worker's socket.
+  SLACK_CLIENT_ID: ${SLACK_CLIENT_ID:-}
+  SLACK_CLIENT_SECRET: ${SLACK_CLIENT_SECRET:-}
+  SLACK_SIGNING_SECRET: ${SLACK_SIGNING_SECRET:-}
+  SLACK_APP_TOKEN: ${SLACK_APP_TOKEN:-}
+  SLACK_PUBLIC_URL: ${SLACK_PUBLIC_URL:-}
+
+services:
+  postgres:
+    image: pgvector/pgvector:pg17
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?set POSTGRES_PASSWORD}
+      POSTGRES_DB: opendash
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres -d opendash"]
+      interval: 5s
+      timeout: 5s
+      retries: 20
+
+  setup:
+    image: ${OPENDASH_WORKER_IMAGE:-opendash-worker:local}
+    build: { context: ., dockerfile: apps/worker/Dockerfile }
+    command: ["setup"]
+    restart: "no"
+    environment:
+      DATABASE_ADMIN_URL: postgres://postgres:${POSTGRES_PASSWORD}@postgres:5432/opendash
+      DATABASE_OWNER_URL: postgres://opendash_owner:${OPENDASH_DB_OWNER_PASSWORD:?set OPENDASH_DB_OWNER_PASSWORD}@postgres:5432/opendash
+      DATABASE_QUEUE_URL: postgres://opendash_queue:${OPENDASH_DB_QUEUE_PASSWORD}@postgres:5432/opendash
+      OPENDASH_DB_OWNER_PASSWORD: ${OPENDASH_DB_OWNER_PASSWORD}
+      OPENDASH_DB_APP_PASSWORD: ${OPENDASH_DB_APP_PASSWORD}
+      OPENDASH_DB_SYSTEM_PASSWORD: ${OPENDASH_DB_SYSTEM_PASSWORD}
+      OPENDASH_DB_AUTH_PASSWORD: ${OPENDASH_DB_AUTH_PASSWORD}
+      OPENDASH_DB_QUEUE_PASSWORD: ${OPENDASH_DB_QUEUE_PASSWORD}
+      # The sample company (Acme) as its own database, seeded once: connect it on Data → Connect source.
+      OPENDASH_SEED_DEMO: ${OPENDASH_SEED_DEMO:-}
+      OPENDASH_DEMO_READER_PASSWORD: ${OPENDASH_DEMO_READER_PASSWORD:-}
+    depends_on:
+      postgres: { condition: service_healthy }
+
+  web:
+    image: ${OPENDASH_WEB_IMAGE:-opendash-web:local}
+    build: { context: ., dockerfile: apps/web/Dockerfile }
+    restart: unless-stopped
+    environment:
+      <<: *app
+    # On this machine only by default: put a proxy in front (HOSTING.md), or set OPENDASH_BIND=0.0.0.0.
+    ports:
+      - "${OPENDASH_BIND:-127.0.0.1}:${OPENDASH_PORT:-3000}:3000"
+    depends_on:
+      setup: { condition: service_completed_successfully }
+
+  worker:
+    image: ${OPENDASH_WORKER_IMAGE:-opendash-worker:local}
+    build: { context: ., dockerfile: apps/worker/Dockerfile }
+    command: ["start"]
+    restart: unless-stopped
+    init: true
+    environment:
+      <<: *app
+      WORKER_POOLS: ${WORKER_POOLS:-all}
+    depends_on:
+      setup: { condition: service_completed_successfully }
+
+  # Optional HTTPS in front of the web app (`--profile caddy`). It overwrites X-Forwarded-For with the client's address,
+  # so rate limits count per client with nothing else to set.
+  caddy:
+    image: caddy:2.10.2
+    profiles: ["caddy"]
+    restart: unless-stopped
+    environment:
+      OPENDASH_DOMAIN: ${OPENDASH_DOMAIN:-localhost}
+      # Dashboards' own host, served by the same web app (its DNS pointing here too).
+      OPENDASH_FRAMES_DOMAIN: ${OPENDASH_FRAMES_DOMAIN:-frames.${OPENDASH_DOMAIN:-localhost}}
+    ports:
+      - "${OPENDASH_PROXY_BIND:-0.0.0.0}:${OPENDASH_HTTP_PORT:-80}:80"
+      - "${OPENDASH_PROXY_BIND:-0.0.0.0}:${OPENDASH_HTTPS_PORT:-443}:443"
+    volumes:
+      - ./infra/caddy/Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy-data:/data
+    depends_on:
+      - web
+
+volumes:
+  pgdata:
+  caddy-data:

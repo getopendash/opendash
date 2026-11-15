@@ -1,0 +1,1609 @@
+/* The kit's look: OpenDash's tokens (generated into theme.css above this file), compact 32px controls, hairlines
+   instead of shadows, the lavender accent used sparingly. The runtime's primitives and controls style through these
+   classes and tokens only; an App's own code styles with Tailwind. */
+*,
+*::before,
+*::after {
+  box-sizing: border-box;
+}
+html,
+body {
+  margin: 0;
+  height: 100%;
+}
+body {
+  background: var(--background);
+  color: var(--foreground);
+  font:
+    13.5px / 1.5 ui-sans-serif,
+    system-ui,
+    -apple-system,
+    "Segoe UI",
+    sans-serif;
+  -webkit-font-smoothing: antialiased;
+  font-variant-numeric: tabular-nums;
+}
+button,
+input,
+select {
+  font: inherit;
+  color: inherit;
+}
+:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 1px;
+  border-radius: 4px;
+}
+.od-tabs {
+  display: flex;
+  gap: 2px;
+  order: 3;
+  flex-basis: 100%;
+  overflow-x: auto;
+}
+.od-tabs button {
+  height: 34px;
+  padding: 0 12px;
+  border: 0;
+  border-bottom: 2px solid transparent;
+  background: none;
+  color: var(--muted);
+  cursor: pointer;
+  white-space: nowrap;
+  margin-bottom: -1px;
+}
+.od-tabs button[aria-current="page"] {
+  color: var(--foreground);
+  border-bottom-color: var(--accent);
+  font-weight: 500;
+}
+@keyframes od-pulse {
+  50% {
+    opacity: 0.55;
+  }
+}
+
+/* A piece's states: its shape kept from the first moment, so nothing jumps when its answer lands. */
+.od-skel {
+  display: grid;
+  gap: 8px;
+  align-content: start;
+}
+.od-skel-for-chart {
+  min-height: 286px;
+}
+.od-skel-for-grid {
+  min-height: 300px;
+}
+.od-bone {
+  display: block;
+  height: 10px;
+  border-radius: 5px;
+  background: var(--surface-secondary);
+  animation: od-pulse 1.4s ease-in-out infinite;
+}
+.od-skel-chart {
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  background: var(--surface);
+  height: 284px;
+  padding: 24px 20px 16px;
+  display: grid;
+  grid-template-rows: minmax(0, 1fr) auto;
+  gap: 10px;
+}
+.od-skel-bars {
+  display: flex;
+  align-items: flex-end;
+  gap: 10px;
+  min-height: 0;
+}
+/* Ghost bars all one height: a loading chart never draws a trend it doesn't have. */
+.od-skel-chart .od-bone {
+  flex: 1;
+  height: 42%;
+  border-radius: 4px 4px 0 0;
+}
+.od-skel-grid {
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  background: var(--surface);
+  padding: 12px;
+  display: grid;
+  gap: 14px;
+}
+.od-skel-grid .od-bone {
+  height: 12px;
+}
+.od-bone-head {
+  opacity: 0.6;
+  width: 70%;
+}
+.od-slow {
+  margin: 0;
+  font-size: 12px;
+  color: var(--muted);
+}
+.od-stateful {
+  position: relative;
+  display: grid;
+  gap: 8px;
+  min-width: 0;
+}
+/* A newer answer loading over the last one: the last stays, faded, under a thin line. */
+.od-stale > :not(.od-progress):not(.od-refresh-failed):not(.od-slow) {
+  opacity: 0.55;
+  transition: opacity 160ms ease;
+}
+.od-progress {
+  position: absolute;
+  inset: -6px 0 auto;
+  height: 2px;
+  border-radius: 1px;
+  overflow: hidden;
+  background: var(--accent-soft);
+}
+.od-progress::after {
+  content: "";
+  position: absolute;
+  inset: 0 auto 0 0;
+  width: 40%;
+  background: var(--accent);
+  animation: od-slide 1.1s ease-in-out infinite;
+}
+@keyframes od-slide {
+  from {
+    transform: translateX(-100%);
+  }
+  to {
+    transform: translateX(250%);
+  }
+}
+.od-refresh-failed,
+/* A piece that couldn't load: quiet, in the page's ink, a small mark for the state, the source's words under it. */
+.od-state-error {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  background: var(--surface);
+  padding: 12px 14px;
+  min-height: 92px;
+  font-size: 13px;
+  color: var(--foreground);
+}
+.od-state-error p {
+  margin: 0;
+  flex: 1;
+  min-width: 0;
+  display: grid;
+  gap: 2px;
+}
+.od-state-error strong {
+  font-weight: 500;
+}
+/* The state's small mark, on the line it marks. */
+.od-state-error strong::before {
+  content: "";
+  display: inline-block;
+  width: 6px;
+  height: 6px;
+  margin-right: 8px;
+  border-radius: 50%;
+  background: var(--danger);
+  vertical-align: 0.12em;
+}
+.od-state-error p span {
+  font-size: 12px;
+  color: var(--muted);
+}
+.od-refresh-failed span {
+  flex: 1;
+  min-width: 0;
+}
+.od-retry {
+  height: 28px;
+  padding: 0 10px;
+  border-radius: 7px;
+  border: 1px solid var(--border);
+  background: var(--surface);
+  color: var(--foreground);
+  font: inherit;
+  font-size: 12.5px;
+  cursor: pointer;
+}
+.od-retry:hover {
+  background: var(--background-secondary);
+}
+.od-retry:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 1px;
+}
+.od-empty {
+  border: 1px dashed var(--border);
+  border-radius: 10px;
+  padding: 22px 16px;
+  text-align: center;
+  display: grid;
+  gap: 4px;
+}
+.od-empty p {
+  margin: 0;
+  font-size: 13px;
+  color: var(--muted);
+}
+/* Empty or failed, a chart or a list keeps the room its answer takes: nothing below it moves. */
+.od-for-chart .od-empty,
+.od-state-error.od-for-chart {
+  min-height: 260px;
+  align-content: center;
+}
+.od-for-grid .od-empty,
+.od-state-error.od-for-grid {
+  min-height: 220px;
+  align-content: center;
+}
+.od-state-error.od-for-chart,
+.od-state-error.od-for-grid {
+  flex-direction: column;
+  justify-content: center;
+  text-align: center;
+}
+.od-state-error.od-for-chart p,
+.od-state-error.od-for-grid p {
+  flex: 0 1 auto;
+}
+.od-empty .od-empty-hint {
+  font-size: 12px;
+  color: var(--muted);
+  opacity: 0.8;
+}
+@media (prefers-reduced-motion: reduce) {
+  .od-bone,
+  .od-progress::after {
+    animation: none;
+  }
+}
+.od-tr.od-selected {
+  background: var(--accent-soft);
+}
+
+.od-value {
+  all: unset;
+  cursor: pointer;
+  border-radius: 3px;
+}
+.od-value:hover {
+  text-decoration: underline dotted;
+  text-underline-offset: 3px;
+}
+
+/* Controls share their top edge. */
+.od-filterbar {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px 12px;
+  align-items: flex-start;
+}
+.od-field {
+  display: grid;
+  gap: 3px;
+  font-size: 12px;
+  color: var(--muted);
+}
+.od-field {
+  flex: 1 1 150px;
+  max-width: 260px;
+  min-width: 0;
+}
+.od-search {
+  flex-basis: 220px;
+  max-width: 320px;
+}
+.od-field select,
+.od-field input {
+  height: 32px;
+  border: 1px solid var(--field-border);
+  background: var(--field-background);
+  color: var(--field-foreground);
+  border-radius: 7px;
+  padding: 0 10px;
+  width: 100%;
+  min-width: 0;
+}
+.od-tscroll {
+  overflow-x: auto;
+  overflow-y: hidden;
+}
+
+.od-table {
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  background: var(--surface);
+  display: grid;
+  gap: 0;
+  min-width: 0;
+  overflow: hidden;
+}
+.od-table > .od-filterbar {
+  padding: 10px 12px;
+  border-bottom: 1px solid var(--separator);
+}
+.od-thead {
+  display: grid;
+  gap: 12px;
+  padding: 0 12px;
+  border-bottom: 1px solid var(--border);
+}
+.od-th {
+  all: unset;
+  cursor: pointer;
+  height: 32px;
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  font-size: 12px;
+  color: var(--muted);
+  white-space: nowrap;
+  overflow: hidden;
+}
+.od-th.num {
+  justify-content: flex-end;
+}
+.od-th i {
+  font-style: normal;
+  color: var(--foreground);
+}
+.od-tbody {
+  overflow-y: auto;
+  overflow-x: hidden;
+  position: relative;
+}
+.od-tr {
+  position: absolute;
+  left: 0;
+  right: 0;
+  height: 34px;
+  display: grid;
+  gap: 12px;
+  align-items: center;
+  padding: 0 12px;
+  border-bottom: 1px solid var(--separator);
+}
+.od-tr.od-clickable {
+  cursor: pointer;
+}
+.od-tr.od-clickable:hover {
+  background: var(--surface-secondary);
+}
+.od-td {
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  min-width: 0;
+}
+.od-td.num {
+  text-align: right;
+}
+.od-tfoot {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 12px;
+  flex-wrap: wrap;
+  padding: 8px 12px;
+  border-top: 1px solid var(--separator);
+  font-size: 12px;
+  color: var(--muted);
+}
+.od-pager {
+  display: flex;
+  gap: 6px;
+}
+.od-pager button {
+  height: 28px;
+  padding: 0 10px;
+  border: 1px solid var(--border);
+  background: var(--surface);
+  border-radius: 6px;
+  cursor: pointer;
+}
+.od-pager button:disabled {
+  opacity: 0.45;
+  cursor: default;
+}
+.od-emptystate {
+  margin: 0;
+  padding: 28px 12px;
+  text-align: center;
+  color: var(--muted);
+}
+.od-error {
+  margin: 0;
+  padding: 10px 12px;
+  color: var(--danger);
+}
+@media (prefers-reduced-motion: reduce) {
+  * {
+    transition: none;
+    animation: none;
+  }
+}
+
+/* ---- controls: a popover under its trigger, the date range, the value picker ------------------------------------- */
+.od-pop {
+  position: relative;
+}
+.od-pop-trigger {
+  height: 32px;
+  border: 1px solid var(--field-border);
+  background: var(--field-background);
+  color: var(--field-foreground);
+  border-radius: 7px;
+  padding: 0 10px;
+  width: 100%;
+  min-width: 0;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font: inherit;
+  font-size: 13px;
+  cursor: pointer;
+  text-align: left;
+}
+.od-pop-trigger:focus-visible,
+.od-option:focus-visible,
+.od-btn:focus-visible,
+.od-btn-quiet:focus-visible,
+.od-chip:focus-visible,
+.od-icon-btn:focus-visible,
+.od-cal-day:focus-visible,
+.od-th-filter:focus-visible,
+.od-seg button:focus-visible,
+.od-pagenum:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 1px;
+}
+/* In the filter bar: the name inside, the control as wide as what it says. */
+.od-filterbar > .od-pop-inline {
+  flex: 0 1 auto;
+  max-width: 320px;
+}
+.od-pop-key {
+  color: var(--muted);
+  white-space: nowrap;
+}
+.od-pop-value {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.od-pop-inline .od-pop-value {
+  font-weight: 500;
+}
+.od-caret {
+  color: var(--muted);
+  font-size: 11px;
+}
+.od-pop-panel {
+  position: absolute;
+  z-index: 20;
+  top: calc(100% + 6px);
+  left: 0;
+  max-width: calc(100vw - 32px);
+  background: var(--surface);
+  color: var(--foreground);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  box-shadow: 0 12px 28px -16px rgb(0 0 0 / 0.28);
+  padding: 10px;
+}
+.od-pop-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+  padding-top: 8px;
+}
+.od-btn,
+.od-btn-quiet {
+  height: 28px;
+  padding: 0 12px;
+  border-radius: 7px;
+  font: inherit;
+  font-size: 12.5px;
+  cursor: pointer;
+}
+.od-btn {
+  border: 1px solid var(--accent);
+  background: var(--accent);
+  color: var(--accent-foreground);
+}
+.od-btn:disabled {
+  opacity: 0.45;
+  cursor: default;
+}
+.od-btn-quiet {
+  border: 1px solid var(--border);
+  background: var(--surface);
+  color: var(--foreground);
+}
+.od-btn-quiet:disabled {
+  opacity: 0.45;
+  cursor: default;
+}
+.od-icon-btn {
+  all: unset;
+  width: 24px;
+  height: 24px;
+  display: inline-grid;
+  place-items: center;
+  border-radius: 6px;
+  color: var(--muted);
+  cursor: pointer;
+}
+.od-icon-btn:hover {
+  background: var(--background-secondary);
+  color: var(--foreground);
+}
+.od-option {
+  all: unset;
+  box-sizing: border-box;
+  width: 100%;
+  min-height: 30px;
+  padding: 4px 8px;
+  border-radius: 6px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 13px;
+  cursor: pointer;
+}
+.od-option:hover {
+  background: var(--background-secondary);
+}
+.od-option-on {
+  color: var(--accent-soft-foreground);
+}
+.od-option-label {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.od-check {
+  width: 15px;
+  height: 15px;
+  border: 1px solid var(--field-border);
+  border-radius: 4px;
+  display: inline-grid;
+  place-items: center;
+  font-size: 10px;
+  color: var(--accent-foreground);
+  flex: none;
+}
+.od-option-on .od-check {
+  background: var(--accent);
+  border-color: var(--accent);
+}
+.od-radio {
+  border-radius: 50%;
+}
+.od-count {
+  color: var(--muted);
+  font-size: 12px;
+  font-variant-numeric: tabular-nums;
+}
+.od-picker {
+  display: grid;
+  gap: 8px;
+}
+.od-picker-search {
+  height: 30px;
+  border: 1px solid var(--field-border);
+  background: var(--field-background);
+  color: var(--field-foreground);
+  border-radius: 7px;
+  padding: 0 10px;
+  font: inherit;
+  font-size: 13px;
+  width: 100%;
+  box-sizing: border-box;
+}
+.od-picker-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  max-height: 248px;
+  overflow-y: auto;
+}
+.od-picker-none {
+  padding: 10px 8px;
+  font-size: 12.5px;
+  color: var(--muted);
+}
+.od-tokens {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+.od-token,
+.od-chip {
+  all: unset;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  height: 24px;
+  padding: 0 8px;
+  border-radius: 999px;
+  background: var(--accent-soft);
+  color: var(--accent-soft-foreground);
+  font-size: 12px;
+  cursor: pointer;
+  max-width: 100%;
+}
+.od-chip span,
+.od-token span {
+  opacity: 0.7;
+}
+.od-range {
+  display: grid;
+  grid-template-columns: 150px minmax(0, 1fr);
+  gap: 12px;
+}
+.od-range-presets {
+  list-style: none;
+  margin: 0;
+  padding: 0 12px 0 0;
+  border-right: 1px solid var(--separator);
+}
+.od-cal-nav {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  font-size: 12.5px;
+  color: var(--muted);
+}
+.od-cal-months {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 16px;
+  padding-top: 6px;
+}
+.od-cal-title {
+  margin: 0 0 6px;
+  font-size: 12.5px;
+  font-weight: 600;
+  text-align: center;
+}
+.od-cal-grid {
+  display: grid;
+  grid-template-columns: repeat(7, minmax(0, 1fr));
+  gap: 2px;
+}
+.od-cal-wd {
+  font-size: 11px;
+  color: var(--muted);
+  text-align: center;
+  padding-bottom: 2px;
+}
+.od-cal-day {
+  all: unset;
+  height: 28px;
+  display: grid;
+  place-items: center;
+  font-size: 12.5px;
+  border-radius: 6px;
+  cursor: pointer;
+  font-variant-numeric: tabular-nums;
+}
+.od-cal-day:hover {
+  background: var(--background-secondary);
+}
+.od-cal-in {
+  background: var(--accent-soft);
+  border-radius: 0;
+}
+/* A range's ends keep their accent under the pointer too (hover would otherwise win and hide the day). */
+.od-cal-end,
+.od-cal-end:hover {
+  background: var(--accent);
+  color: var(--accent-foreground);
+}
+@media (max-width: 560px) {
+  .od-range {
+    grid-template-columns: minmax(0, 1fr);
+  }
+  .od-range-presets {
+    border-right: 0;
+    padding: 0;
+    display: flex;
+    flex-wrap: wrap;
+    gap: 4px;
+  }
+  .od-range-presets .od-option {
+    width: auto;
+  }
+  .od-cal-months {
+    grid-template-columns: minmax(0, 1fr);
+  }
+  .od-cal-months > :last-child {
+    display: none;
+  }
+}
+
+/* ---- the data grid: chips, column filters, totals, pages, density, cells ----------------------------------------- */
+.od-sr {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip-path: inset(50%);
+  white-space: nowrap;
+}
+.od-grid-bar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  flex-wrap: wrap;
+  min-height: 28px;
+}
+.od-chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  align-items: center;
+  min-width: 0;
+}
+.od-seg {
+  display: inline-flex;
+  border: 1px solid var(--border);
+  border-radius: 7px;
+  padding: 2px;
+  margin: 0;
+  gap: 2px;
+  margin-left: auto;
+}
+.od-seg button {
+  all: unset;
+  height: 24px;
+  padding: 0 8px;
+  border-radius: 5px;
+  font-size: 12px;
+  color: var(--muted);
+  cursor: pointer;
+}
+.od-seg button[aria-pressed="true"] {
+  background: var(--background-secondary);
+  color: var(--foreground);
+}
+.od-th-cell {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  min-width: 0;
+  position: relative;
+}
+/* A column's edge: a hairline that shows on hover or focus, dragged to size the column. */
+.od-th-resize {
+  position: absolute;
+  top: 6px;
+  bottom: 6px;
+  right: -7px;
+  width: 9px;
+  cursor: col-resize;
+  touch-action: none;
+  z-index: 1;
+}
+.od-th-resize::after {
+  content: "";
+  position: absolute;
+  inset: 0 4px;
+  background: var(--border);
+  opacity: 0;
+  transition: opacity 120ms;
+}
+.od-th-cell:hover .od-th-resize::after,
+.od-th-resize:focus-visible::after,
+.od-th-resize:active::after {
+  opacity: 1;
+  background: var(--accent);
+}
+.od-th-resize:focus-visible {
+  outline: none;
+}
+.od-th-cell.num {
+  justify-content: flex-end;
+}
+.od-th-filter {
+  all: unset;
+  width: 20px;
+  height: 20px;
+  display: inline-grid;
+  place-items: center;
+  border-radius: 5px;
+  color: var(--muted);
+  opacity: 0.55;
+  cursor: pointer;
+  flex: none;
+}
+.od-th-cell:hover .od-th-filter,
+.od-th-filter-on,
+.od-th-filter[aria-expanded="true"] {
+  opacity: 1;
+}
+.od-th-filter-on {
+  color: var(--accent);
+}
+.od-th-filter svg {
+  width: 12px;
+  height: 12px;
+  fill: currentColor;
+}
+.od-filter-panel {
+  border-bottom: 1px solid var(--separator);
+  background: var(--surface-secondary);
+  padding: 10px 12px;
+  display: grid;
+  gap: 8px;
+}
+.od-filter-title {
+  margin: 0;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  font-size: 12.5px;
+  font-weight: 600;
+}
+.od-colfilter {
+  display: grid;
+  gap: 8px;
+  max-width: 420px;
+}
+.od-colrange {
+  grid-template-columns: repeat(2, minmax(0, 1fr)) auto;
+  align-items: end;
+  max-width: 520px;
+}
+.od-colrange .od-field {
+  max-width: none;
+}
+.od-ttotals {
+  display: grid;
+  gap: 12px;
+  padding: 0 12px;
+  height: 34px;
+  align-items: center;
+  border-top: 1px solid var(--border);
+  background: var(--surface-secondary);
+  font-size: 13px;
+  font-weight: 600;
+}
+.od-pagesize {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 12px;
+  color: var(--muted);
+  margin-right: 6px;
+}
+.od-pagesize select {
+  height: 28px;
+  border: 1px solid var(--border);
+  background: var(--surface);
+  color: var(--foreground);
+  border-radius: 6px;
+  padding: 0 6px;
+  font: inherit;
+  font-size: 12px;
+}
+.od-pager .od-pagenum {
+  min-width: 28px;
+  padding: 0 6px;
+  font-variant-numeric: tabular-nums;
+}
+.od-pager .od-pagenum-on {
+  background: var(--accent-soft);
+  border-color: transparent;
+  color: var(--accent-soft-foreground);
+  font-weight: 600;
+}
+.od-gap {
+  color: var(--muted);
+  align-self: center;
+}
+.od-compact .od-tr {
+  font-size: 12.5px;
+}
+.od-bar-cell {
+  display: inline-flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 8px;
+  width: 100%;
+}
+/* The bar's track is its own room: the bar is its share of the page's largest, never clipped. */
+.od-bar-track {
+  flex: 0 0 55%;
+  height: 8px;
+}
+.od-bar {
+  display: block;
+  height: 8px;
+  border-radius: 4px;
+  background: var(--chart-1);
+  opacity: 0.85;
+}
+.od-bar-value {
+  font-variant-numeric: tabular-nums;
+  min-width: 0;
+}
+.od-badge-cell {
+  display: inline-block;
+  padding: 1px 8px;
+  border-radius: 999px;
+  font-size: 12px;
+  line-height: 18px;
+  max-width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  vertical-align: middle;
+}
+.od-badge-cell[data-tone="1"] {
+  background: color-mix(in oklab, var(--chart-1) 18%, transparent);
+}
+.od-badge-cell[data-tone="2"] {
+  background: color-mix(in oklab, var(--chart-2) 18%, transparent);
+}
+.od-badge-cell[data-tone="3"] {
+  background: color-mix(in oklab, var(--chart-3) 20%, transparent);
+}
+.od-badge-cell[data-tone="4"] {
+  background: color-mix(in oklab, var(--chart-4) 18%, transparent);
+}
+.od-badge-cell[data-tone="5"] {
+  background: color-mix(in oklab, var(--chart-5) 18%, transparent);
+}
+.od-badge-cell[data-tone="6"] {
+  background: color-mix(in oklab, var(--chart-6) 18%, transparent);
+}
+
+/* ---- charts: its legend, its chart, and what was cut ------------------------------------------------------------- */
+.od-chartview {
+  position: relative;
+  display: grid;
+  gap: 8px;
+  min-width: 0;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  background: var(--surface);
+  padding: 12px;
+}
+.od-legend {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px 14px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  font-size: 12px;
+  color: var(--muted);
+}
+.od-legend li {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+}
+/* The mark beside a name: its colour in the series' own shape (the name says which, never the colour alone). */
+.od-key {
+  flex: none;
+  display: inline-block;
+}
+.od-key-box {
+  width: 10px;
+  height: 10px;
+  border-radius: 3px;
+  background: currentColor;
+}
+.od-key-line {
+  width: 14px;
+  height: 2px;
+  border-radius: 1px;
+  background: currentColor;
+}
+.od-key-dash {
+  width: 14px;
+  height: 0;
+  border-top: 2px dashed currentColor;
+}
+.od-key-tick {
+  width: 3px;
+  height: 12px;
+  border-radius: 1px;
+  background: currentColor;
+}
+.od-plot {
+  min-width: 0;
+  border-radius: 6px;
+}
+.od-plot:focus-visible {
+  outline-offset: 4px;
+}
+.od-plot-scroll {
+  overflow-x: auto;
+}
+.od-canvas {
+  width: 100%;
+}
+.od-panels {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(150px, 1fr));
+  gap: 14px 16px;
+}
+.od-panel {
+  margin: 0;
+  min-width: 0;
+}
+.od-panel figcaption {
+  font-size: 12px;
+  font-weight: 500;
+  color: var(--foreground);
+  margin-bottom: 2px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.od-chart-note {
+  margin: 0;
+  font-size: 12px;
+  color: var(--muted);
+}
+
+/* ---- tabs: a name, and a count beside it ---------------------------------------------------------------------- */
+.od-tabs button {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+}
+.od-page-name {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+/* A row's link (a tracker's issue key): text that reads as a link, opened by the page. */
+.od-link-cell {
+  all: unset;
+  cursor: pointer;
+  color: var(--accent);
+  text-decoration: underline;
+  text-decoration-color: color-mix(in srgb, var(--accent) 35%, transparent);
+  text-underline-offset: 2px;
+}
+.od-link-cell:hover {
+  text-decoration-color: var(--accent);
+}
+.od-link-cell:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+  border-radius: 3px;
+}
+
+/* ---- rows read from a service: where they came from, and when ------------------------------------------------- */
+.od-service-note,
+.od-source {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin: 8px 0 0;
+  font-size: 11.5px;
+  color: var(--muted);
+}
+.od-source-text {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+/* The source's mark on a white tile with a hairline, as the web app's logos are (a light brand colour keeps its tile). */
+.od-source-mark {
+  display: inline-flex;
+  flex: none;
+  align-items: center;
+  justify-content: center;
+  width: 16px;
+  height: 16px;
+  border-radius: 4px;
+  box-shadow: inset 0 0 0 1px rgb(0 0 0 / 0.1);
+}
+.od-source-mark svg {
+  width: 10px;
+  height: 10px;
+}
+
+/* ---- a written summary ----------------------------------------------------------------------------------------- */
+
+.od-summary {
+  padding: 12px 14px;
+  border: 1px dashed var(--border);
+  border-radius: 10px;
+  background: var(--surface);
+}
+.od-summary-empty {
+  margin: 0;
+  font-size: 13px;
+  color: var(--muted);
+}
+
+/* A written summary is text with where it came from under it: the same hairline card as the rest, no tint, no sparkle. */
+.od-summary {
+  display: flex;
+  gap: 10px;
+  align-items: flex-start;
+  border-style: solid;
+}
+.od-summary-body {
+  display: grid;
+  gap: 6px;
+  min-width: 0;
+}
+.od-summary-text {
+  margin: 0;
+  font-size: 14px;
+  line-height: 1.55;
+  max-width: 72ch;
+}
+.od-summary-foot {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px 12px;
+  align-items: center;
+  font-size: 11.5px;
+  color: var(--muted);
+}
+.od-summary-act {
+  all: unset;
+  cursor: pointer;
+  color: var(--accent);
+  font-size: 12px;
+  font-weight: 500;
+}
+.od-summary-act:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+  border-radius: 3px;
+}
+.od-summary-writing .od-summary-empty {
+  animation: od-pulse 1.4s ease-in-out infinite;
+}
+@keyframes od-pulse {
+  50% {
+    opacity: 0.5;
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .od-summary-writing .od-summary-empty {
+    animation: none;
+  }
+}
+
+/* ---- tables that explain: pills with a meaning, people ------------------------------------------------------ */
+.od-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 1px 8px 1px 7px;
+  border-radius: 999px;
+  font-size: 12px;
+  line-height: 18px;
+  border: 1px solid var(--border);
+  background: var(--surface);
+  white-space: nowrap;
+}
+.od-pill-dot {
+  width: 6px;
+  height: 6px;
+  border-radius: 999px;
+  background: var(--muted);
+}
+.od-pill[data-meaning="good"] {
+  background: var(--success-soft);
+  color: var(--success-soft-foreground);
+  border-color: transparent;
+}
+.od-pill[data-meaning="good"] .od-pill-dot {
+  background: var(--success);
+}
+.od-pill[data-meaning="warn"] {
+  background: var(--warning-soft);
+  color: var(--warning-soft-foreground);
+  border-color: transparent;
+}
+.od-pill[data-meaning="warn"] .od-pill-dot {
+  background: var(--warning);
+}
+.od-pill[data-meaning="bad"] {
+  background: var(--danger-soft);
+  color: var(--danger-soft-foreground);
+  border-color: transparent;
+}
+.od-pill[data-meaning="bad"] .od-pill-dot {
+  background: var(--danger);
+}
+.od-person {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+}
+.od-avatar {
+  display: inline-grid;
+  place-items: center;
+  width: 22px;
+  height: 22px;
+  border-radius: 999px;
+  font-size: 10px;
+  font-weight: 600;
+  letter-spacing: 0.02em;
+  flex: none;
+  background: var(--surface-secondary);
+  color: var(--foreground);
+}
+.od-person-name {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.od-person-none {
+  color: var(--muted);
+  font-style: italic;
+}
+.od-avatar[data-tone="1"] {
+  background: color-mix(in oklab, var(--chart-1) 26%, var(--surface));
+}
+.od-avatar[data-tone="2"] {
+  background: color-mix(in oklab, var(--chart-2) 26%, var(--surface));
+}
+.od-avatar[data-tone="3"] {
+  background: color-mix(in oklab, var(--chart-3) 26%, var(--surface));
+}
+.od-avatar[data-tone="4"] {
+  background: color-mix(in oklab, var(--chart-4) 26%, var(--surface));
+}
+.od-avatar[data-tone="5"] {
+  background: color-mix(in oklab, var(--chart-5) 26%, var(--surface));
+}
+.od-avatar[data-tone="6"] {
+  background: color-mix(in oklab, var(--chart-6) 26%, var(--surface));
+}
+
+/* ---- working in it: a list's owner, status, follow-up and note -------------------------------------------- */
+.od-work-select,
+.od-work-date,
+.od-work-note {
+  height: 26px;
+  max-width: 100%;
+  padding: 0 6px;
+  border: 1px solid transparent;
+  border-radius: 6px;
+  background: transparent;
+  color: var(--foreground);
+  font: inherit;
+  font-size: 12.5px;
+}
+.od-work-select:hover,
+.od-work-date:hover,
+.od-work-note:hover,
+.od-work-select:focus-visible,
+.od-work-date:focus-visible,
+.od-work-note:focus-visible {
+  border-color: var(--border);
+  background: var(--surface);
+  outline: none;
+}
+.od-work-select:focus-visible,
+.od-work-date:focus-visible,
+.od-work-note:focus-visible {
+  box-shadow: 0 0 0 2px color-mix(in srgb, var(--accent) 40%, transparent);
+}
+.od-work-status[data-meaning="good"] {
+  background: var(--success-soft);
+  color: var(--success-soft-foreground);
+}
+.od-work-status[data-meaning="warn"] {
+  background: var(--warning-soft);
+  color: var(--warning-soft-foreground);
+}
+.od-work-status[data-meaning="bad"] {
+  background: var(--danger-soft);
+  color: var(--danger-soft-foreground);
+}
+.od-work-date.late,
+.od-work-late {
+  color: var(--danger);
+}
+.od-work-note {
+  width: 100%;
+  min-width: 120px;
+}
+.od-work-note::placeholder {
+  color: var(--muted);
+}
+.od-work-note-text {
+  color: var(--muted);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.od-row-tools {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+}
+.od-row-action {
+  all: unset;
+  cursor: pointer;
+  height: 24px;
+  padding: 0 8px;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  font-size: 12px;
+  line-height: 22px;
+  white-space: nowrap;
+  color: var(--foreground);
+  background: var(--surface);
+}
+.od-row-action:hover {
+  background: var(--surface-secondary);
+}
+.od-row-action:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 1px;
+}
+.od-work-ask {
+  all: unset;
+  cursor: pointer;
+  padding: 2px 8px;
+  border-radius: 6px;
+  font-size: 12px;
+  color: var(--accent);
+}
+.od-work-ask:hover {
+  background: color-mix(in srgb, var(--accent) 10%, transparent);
+}
+.od-work-ask:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 1px;
+}
+/* A pinned cell (a row's Ask and actions): kept at the visible right edge, covering the gap before it, with a hairline
+   while columns pass under it. */
+.od-pin {
+  position: relative;
+  z-index: 1;
+  transform: translateX(var(--od-pin, 0px));
+  margin: 0 -12px;
+  padding: 0 12px;
+  background: var(--surface);
+}
+[data-pinned] .od-pin {
+  box-shadow: -1px 0 0 var(--separator);
+}
+.od-tr.od-selected .od-pin {
+  background: var(--accent-soft);
+}
+.od-tr.od-clickable:hover .od-pin {
+  background: var(--surface-secondary);
+}
+.od-th.od-th-static {
+  cursor: default;
+}
+.od-work-error {
+  margin: 0 0 6px;
+  font-size: 12.5px;
+  color: var(--danger);
+}
+
+/* A strip of squares in a cell. */
+.od-dots {
+  display: inline-flex;
+  gap: 3px;
+  vertical-align: middle;
+}
+.od-dot {
+  width: 9px;
+  height: 9px;
+  border-radius: 2px;
+  background: var(--surface-secondary);
+}
+.od-dot[data-level="high"] {
+  background: var(--success);
+}
+.od-dot[data-level="mid"] {
+  background: var(--warning);
+}
+.od-dot[data-level="low"] {
+  background: var(--danger);
+}
+
+/* A worked record's card and history. */
+.od-work-more {
+  all: unset;
+  cursor: pointer;
+  padding: 2px 6px;
+  border-radius: 6px;
+  font-size: 13px;
+  line-height: 1;
+  color: var(--muted);
+}
+.od-work-more:hover {
+  background: var(--surface-secondary);
+  color: var(--foreground);
+}
+.od-work-more:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 1px;
+}
+.od-work-card {
+  display: grid;
+  gap: 10px;
+  margin: 0 0 10px;
+  padding: 14px 16px;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  background: var(--surface);
+  max-width: 520px;
+}
+.od-work-card-head {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.od-work-card-by {
+  margin-left: auto;
+  font-size: 12px;
+  color: var(--muted);
+}
+.od-work-card-facts {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 8px;
+  margin: 0;
+}
+.od-work-card-facts dt {
+  font-size: 11.5px;
+  color: var(--muted);
+}
+.od-work-card-facts dd {
+  margin: 2px 0 0;
+  font-size: 13px;
+}
+.od-work-card-note {
+  margin: 0;
+  padding: 8px 10px;
+  border: 1px solid var(--border);
+  border-radius: 7px;
+  font-size: 13px;
+  white-space: pre-wrap;
+}
+.od-work-card-history {
+  display: grid;
+  gap: 6px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  font-size: 12.5px;
+}
+.od-work-card-history li {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+}
+.od-work-card-muted {
+  color: var(--muted);
+}
+
+/* A summary's sources, its older words, and Regenerate's angles. */
+.od-summary-old {
+  color: var(--muted);
+}
+.od-summary-sources {
+  margin: 4px 0 0;
+  font-size: 12px;
+  color: var(--muted);
+}
+.od-summary-source {
+  all: unset;
+  cursor: pointer;
+  color: var(--foreground);
+  text-decoration: underline;
+  text-decoration-color: var(--border);
+  text-underline-offset: 3px;
+}
+.od-summary-source:hover {
+  text-decoration-color: currentColor;
+}
+.od-summary-source:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 1px;
+}
+.od-summary-regen {
+  position: relative;
+  display: inline-flex;
+}
+.od-summary-angles {
+  position: absolute;
+  right: 0;
+  bottom: calc(100% + 6px);
+  z-index: 5;
+  display: grid;
+  min-width: 230px;
+  padding: 4px;
+  border: 1px solid var(--border);
+  border-radius: 9px;
+  background: var(--surface);
+}
+.od-summary-angle {
+  all: unset;
+  cursor: pointer;
+  display: grid;
+  gap: 1px;
+  padding: 7px 9px;
+  border-radius: 6px;
+  font-size: 12.5px;
+}
+.od-summary-angle:hover,
+.od-summary-angle:focus-visible {
+  background: var(--surface-secondary);
+}
+.od-summary-angle-hint {
+  font-size: 11.5px;
+  color: var(--muted);
+}
+
+/* An App's tabs: under its header, a hairline below, a count beside a name. */
+.od-app-tabs {
+  order: initial;
+  flex-basis: auto;
+  border-bottom: 1px solid var(--border);
+}
+.od-tab-count {
+  margin-inline-start: 6px;
+  color: var(--muted);
+  font-variant-numeric: tabular-nums;
+  font-size: 12px;
+}
+
+/* Select to edit: while the page has pick mode on, the piece under the pointer is outlined by the runtime (a box of its
+   own above the App, never a change to the App's elements), and the pointer is a crosshair. */
+.od-pick-outline {
+  position: fixed;
+  top: 0;
+  left: 0;
+  z-index: 2147483647;
+  pointer-events: none;
+  border: 2px solid var(--accent);
+  border-radius: 4px;
+  background: color-mix(in oklab, var(--accent) 8%, transparent);
+  transition:
+    transform 60ms ease-out,
+    width 60ms ease-out,
+    height 60ms ease-out;
+}
+.od-pick-outline[hidden] {
+  display: none;
+}
+:root.od-picking,
+:root.od-picking * {
+  cursor: crosshair;
+}
+@media (prefers-reduced-motion: reduce) {
+  .od-pick-outline {
+    transition: none;
+  }
+}

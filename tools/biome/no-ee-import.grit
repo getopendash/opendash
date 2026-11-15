@@ -1,0 +1,11 @@
+engine biome(1.0)
+language js(typescript, jsx)
+
+// ee/package.json's exports, and the planned ones: add a subpath here when ee/ exports it.
+or { `import $_ from $source`, `import { $_ } from $source`, `import * as $_ from $source`, `export { $_ } from $source`, `export * from $source`, `export * as $_ from $source` } as $import where {
+  $source <: or { `"@opendash/ee"`, `"@opendash/ee/license"`, `"@opendash/ee/audit"`, `"@opendash/ee/sso"`, `"@opendash/ee/scim"`, `"@opendash/ee/web"` },
+  register_diagnostic(
+    span = $import,
+    message = "The core never imports ee/ (ee/README.md, docs/operations/LICENSING.md). Only apps/web/enterprise.ts and apps/worker/src/enterprise.ts do: ask them, and type against @opendash/core/enterprise."
+  )
+}

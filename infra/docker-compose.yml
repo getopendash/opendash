@@ -1,0 +1,81 @@
+# Local development and the base of the self-host stack.
+# Postgres with pgvector, exposed on 127.0.0.1:5444 (5432 is often taken by other projects).
+name: opendash
+
+services:
+  postgres:
+    image: pgvector/pgvector:pg17
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: opendash_owner
+      POSTGRES_PASSWORD: opendash
+      POSTGRES_DB: opendash
+    ports:
+      - "127.0.0.1:5444:5432"
+    volumes:
+      - postgres-data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U opendash_owner -d opendash"]
+      interval: 5s
+      timeout: 5s
+      retries: 20
+
+  # ClickHouse, opt-in (`pnpm clickhouse:up`): the second dialect, for the ClickHouse adapter's tests and the demo
+  # company in ClickHouse. HTTP on 127.0.0.1:8124 (8123 is often taken). opendash_owner can manage users, so tests and
+  # `pnpm demo:seed --clickhouse` can create read-only ones.
+  clickhouse:
+    image: clickhouse/clickhouse-server:26.8.11
+    profiles: ["clickhouse"]
+    restart: unless-stopped
+    environment:
+      CLICKHOUSE_USER: opendash_owner
+      CLICKHOUSE_PASSWORD: opendash
+      CLICKHOUSE_DEFAULT_ACCESS_MANAGEMENT: "1"
+    ports:
+      - "127.0.0.1:8124:8123"
+    ulimits:
+      nofile:
+        soft: 262144
+        hard: 262144
+    volumes:
+      - clickhouse-data:/var/lib/clickhouse
+    healthcheck:
+      test: ["CMD-SHELL", "wget -qO- http://127.0.0.1:8123/ping || exit 1"]
+      interval: 5s
+      timeout: 5s
+      retries: 30
+
+  # MySQL, opt-in (`pnpm mysql:up`): the third dialect, for the MySQL adapter's tests and the demo company in MySQL. On
+  # 127.0.0.1:3307 (3306 is often taken). root can create databases and users, so tests and `pnpm demo:seed --mysql`
+  # can make read-only ones.
+  mysql:
+    image: mysql:8.4.10
+    profiles: ["mysql"]
+    restart: unless-stopped
+    environment:
+      MYSQL_ROOT_PASSWORD: opendash
+    ports:
+      - "127.0.0.1:3307:3306"
+    volumes:
+      - mysql-data:/var/lib/mysql
+    healthcheck:
+      test: ["CMD-SHELL", "mysqladmin ping -h 127.0.0.1 -uroot -popendash --silent"]
+      interval: 5s
+      timeout: 5s
+      retries: 30
+
+  # Mailpit, opt-in (`pnpm mail:up`): a local inbox for development. OpenDash sends its email (sign-in links, password
+  # resets, invitations, digests) here over SMTP; it relays nothing, so no real address receives anything. Read it at
+  # http://127.0.0.1:8027. SMTP on 127.0.0.1:1027 (1025 and 1026 are often taken by other projects' Mailpits).
+  mailpit:
+    image: axllent/mailpit:v1.31.2
+    profiles: ["mail"]
+    restart: unless-stopped
+    ports:
+      - "127.0.0.1:1027:1025"
+      - "127.0.0.1:8027:8025"
+
+volumes:
+  postgres-data:
+  clickhouse-data:
+  mysql-data:

@@ -1,0 +1,32 @@
+engine biome(1.0)
+language js(typescript, jsx)
+
+// AGENTS.md: models come from a provider. A bare model id string runs on the AI SDK's global provider,
+// which is Vercel AI Gateway paid by AI_GATEWAY_API_KEY from the environment: never the workspace's own provider,
+// and never one OpenDash chose. So is the global `gateway` itself.
+or {
+  `model: $m` as $prop where {
+    $m <: r"^[\"'`].*",
+    $prop <: within or {
+      `generateText($_)`,
+      `streamText($_)`,
+      `generateObject($_)`,
+      `streamObject($_)`,
+      `embed($_)`,
+      `embedMany($_)`,
+      `new ToolLoopAgent($_)`
+    },
+    register_diagnostic(
+      span = $prop,
+      message = "A bare model id runs on the AI SDK's global provider (Vercel AI Gateway on AI_GATEWAY_API_KEY), not the workspace's. Build the model from its provider (packages/agent/src/providers/build.ts)."
+    )
+  },
+  `import { $names } from $source` as $import where {
+    $source <: or { `"ai"`, `"@ai-sdk/gateway"` },
+    $names <: contains `gateway`,
+    register_diagnostic(
+      span = $import,
+      message = "The AI SDK's global gateway reads AI_GATEWAY_API_KEY from the environment. Build the model from its provider (packages/agent/src/providers/build.ts)."
+    )
+  }
+}

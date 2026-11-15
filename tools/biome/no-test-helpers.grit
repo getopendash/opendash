@@ -1,0 +1,10 @@
+engine biome(1.0)
+language js(typescript, jsx)
+
+or { `import $_ from $source`, `import { $_ } from $source`, `import * as $_ from $source` } as $import where {
+  $source <: `"@opendash/db/testing"`,
+  register_diagnostic(
+    span = $import,
+    message = "@opendash/db/testing is for tests and scripts only: its handles skip the app's own (withTenant, withSystem)."
+  )
+}

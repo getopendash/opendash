@@ -1,0 +1,84 @@
+{
+  "display_information": {
+    "name": "OpenDash",
+    "description": "Ask your data. Every number traced to the query it came from.",
+    "background_color": "#18181b"
+  },
+  "features": {
+    "app_home": {
+      "home_tab_enabled": true,
+      "messages_tab_enabled": true,
+      "messages_tab_read_only_enabled": false
+    },
+    "bot_user": {
+      "display_name": "opendash",
+      "always_online": true
+    },
+    "agent_view": {
+      "agent_description": "Answers questions about your company's data, every number traced to the query it came from.",
+      "suggested_prompts": [
+        {
+          "title": "How did revenue change?",
+          "message": "How did revenue change last month?"
+        },
+        {
+          "title": "Top customers",
+          "message": "Who were our top 10 customers by revenue last quarter?"
+        },
+        {
+          "title": "New customers by month",
+          "message": "How many new customers signed up each month this year?"
+        }
+      ]
+    }
+  },
+  "oauth_config": {
+    "redirect_urls": ["<WEB_URL>/api/slack/oauth"],
+    "scopes": {
+      "bot": [
+        "app_mentions:read",
+        "assistant:write",
+        "channels:history",
+        "channels:read",
+        "chat:write",
+        "files:read",
+        "files:write",
+        "groups:history",
+        "groups:read",
+        "im:history",
+        "im:read",
+        "im:write",
+        "mpim:history",
+        "mpim:read",
+        "reactions:write",
+        "users:read",
+        "users:read.email"
+      ]
+    }
+  },
+  "settings": {
+    "event_subscriptions": {
+      "request_url": "<WEB_URL>/api/slack/events",
+      "bot_events": [
+        "app_mention",
+        "message.im",
+        "message.channels",
+        "message.groups",
+        "message.mpim",
+        "app_home_opened",
+        "app_context_changed",
+        "agent_session_stopped",
+        "agent_session_title_changed",
+        "app_uninstalled",
+        "tokens_revoked"
+      ]
+    },
+    "interactivity": {
+      "is_enabled": true,
+      "request_url": "<WEB_URL>/api/slack/events"
+    },
+    "org_deploy_enabled": false,
+    "socket_mode_enabled": false,
+    "token_rotation_enabled": false
+  }
+}

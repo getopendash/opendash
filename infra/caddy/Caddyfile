@@ -1,0 +1,8 @@
+# HTTPS in front of the web app, for docker-compose.yml's caddy profile (docs/operations/HOSTING.md §4). Caddy gets a
+# certificate for OPENDASH_DOMAIN and for dashboards' own host, OPENDASH_FRAMES_DOMAIN (Let's Encrypt; its own for
+# localhost names), and sends the client's address on, replacing any X-Forwarded-For the client sent. Both reach the
+# same web app; its frame routes answer only on the frames host.
+{$OPENDASH_DOMAIN}, {$OPENDASH_FRAMES_DOMAIN} {
+	encode zstd gzip
+	reverse_proxy web:3000
+}

@@ -1,0 +1,220 @@
+"use client";
+
+import type { AnswerSegment } from "@opendash/core";
+import {
+  type Block,
+  type Inline,
+  numericColumns,
+  parseMarkdown,
+  plainText,
+  REF_CLOSE,
+  REF_OPEN,
+} from "@opendash/markdown";
+import { TracedNumber } from "@opendash/ui";
+import { Fragment, type ReactNode } from "react";
+
+export type TracedRef = Extract<AnswerSegment, { ref: string }>;
+
+type Ref = TracedRef;
+
+const PLACEHOLDER = new RegExp(`${REF_OPEN}(\\d+)${REF_CLOSE}`, "g");
+
+/**
+ * An answer's text from its segments (the gate's pieces): the model's markdown, read the CommonMark way
+ * (@opendash/markdown, as a PDF reads it), with each reference rendered as a traced number from its cells. Nothing in
+ * the text itself is ever shown as a number to trace: only references are; nothing in it is ever HTML, and no link in it
+ * is ever followed.
+ */
+export function AnswerText({
+  segments,
+  scope,
+  selected,
+  unverified,
+  onTrace,
+  className = "text-lead",
+}: {
+  segments: AnswerSegment[];
+  /** Names this text among the run's texts (answer, caveat-0…), so a traced number's key is unique. */
+  scope: string;
+  /** The key (scope:index) of the number being traced. */
+  selected?: string | null;
+  unverified?: boolean;
+  onTrace?: (segment: Ref, key: string) => void;
+  className?: string;
+}) {
+  // References become private-use placeholders, so the markdown is parsed once and they come back in place.
+  const refs: Ref[] = [];
+  const source = segments
+    .map((s) => {
+      if ("text" in s) return s.text;
+      refs.push(s);
+      return `${REF_OPEN}${refs.length - 1}${REF_CLOSE}`;
+    })
+    .join("");
+
+  /** A text part: its references as traced numbers, its own line breaks kept. */
+  const text = (value: string, key: string): ReactNode[] => {
+    const out: ReactNode[] = [];
+    let at = 0;
+    let i = 0;
+    const plain = (t: string) =>
+      t.split("\n").forEach((line, n) => {
+        if (n > 0) out.push(<br key={`${key}-br${i++}`} />);
+        if (line) out.push(line);
+      });
+    for (const m of value.matchAll(PLACEHOLDER)) {
+      plain(value.slice(at, m.index));
+      const index = Number(m[1]);
+      const ref = refs[index];
+      const k = `${key}-${i++}`;
+      if (ref) {
+        out.push(
+          ref.kind === "unresolved" ? (
+            <span key={k} className="text-muted-tertiary">
+              [?]
+            </span>
+          ) : (
+            <TracedNumber
+              key={k}
+              display={ref.display}
+              selected={selected === `${scope}:${index}`}
+              unverified={unverified}
+              {...(onTrace ? { onPress: () => onTrace(ref, `${scope}:${index}`) } : {})}
+            />
+          ),
+        );
+      }
+      at = m.index + m[0].length;
+    }
+    plain(value.slice(at));
+    return out;
+  };
+
+  const inline = (parts: Inline[], key: string): ReactNode[] =>
+    parts.map((p, i) => {
+      const k = `${key}-${i}`;
+      switch (p.kind) {
+        case "text":
+          return <Fragment key={k}>{text(p.text, k)}</Fragment>;
+        case "bold":
+          return <strong key={k}>{inline(p.children, k)}</strong>;
+        case "italic":
+          return <em key={k}>{inline(p.children, k)}</em>;
+        case "struck":
+          return <s key={k}>{inline(p.children, k)}</s>;
+        case "code":
+          return (
+            <code key={k} className="rounded-sm bg-surface-secondary px-1 font-mono text-body">
+              {p.text}
+            </code>
+          );
+        case "break":
+          return <br key={k} />;
+        default: {
+          // A link is never followed from here: an answer is the model's writing, steered by the data it read, and
+          // a link could carry what it read to someone else's site. Its text, with the address beside it when the
+          // text doesn't already say it, for the reader to see and copy.
+          const label = plainText(p.children);
+          const shown = p.href ?? null;
+          return (
+            <Fragment key={k}>
+              {inline(p.children, k)}
+              {shown && label.trim() !== shown && label.trim() !== shown.replace(/\/$/, "") ? (
+                <span className="text-muted break-all"> ({shown})</span>
+              ) : null}
+            </Fragment>
+          );
+        }
+      }
+    });
+
+  /** A table cell as text, for its column's alignment: a reference is its placeholder, as the check expects. */
+  const cellText = (parts: Inline[]) => plainText(parts);
+
+  const block = (b: Block, key: string): ReactNode => {
+    switch (b.kind) {
+      case "paragraph":
+        return <p key={key}>{inline(b.content, key)}</p>;
+      case "heading":
+        return (
+          <p key={key} className="font-medium">
+            {inline(b.content, key)}
+          </p>
+        );
+      case "list": {
+        // An item that's one paragraph is its text; anything more (a nested list) is drawn as blocks.
+        const items = b.items.map((item, i) => {
+          const k = `${key}-${i}`;
+          const [first, ...rest] = item;
+          return (
+            <li key={k}>
+              {first?.kind === "paragraph" ? inline(first.content, k) : first ? block(first, `${k}-0`) : null}
+              {rest.map((r, j) => block(r, `${k}-${j + 1}`))}
+            </li>
+          );
+        });
+        return b.start === null ? (
+          <ul key={key} className="flex list-disc flex-col gap-1 ps-5">
+            {items}
+          </ul>
+        ) : (
+          <ol key={key} start={b.start} className="flex list-decimal flex-col gap-1 ps-5">
+            {items}
+          </ol>
+        );
+      }
+      case "table": {
+        const numeric = numericColumns({ align: b.align, head: b.head, rows: b.rows.map((r) => r.map(cellText)) });
+        const align = (c: number) =>
+          numeric[c] ? "text-right" : b.align[c] === "center" ? "text-center" : "text-left";
+        return (
+          <div key={key} className="overflow-x-auto">
+            <table className="border-collapse text-body tabular-nums">
+              <thead>
+                <tr className="border-b border-border-secondary text-muted">
+                  {b.head.map((h, c) => (
+                    // biome-ignore lint/suspicious/noArrayIndexKey: table cells are positional
+                    <th key={c} className={`py-1.5 pe-6 font-medium last:pe-0 ${align(c)}`}>
+                      {inline(h, `${key}-h${c}`)}
+                    </th>
+                  ))}
+                </tr>
+              </thead>
+              <tbody>
+                {b.rows.map((row, r) => (
+                  // biome-ignore lint/suspicious/noArrayIndexKey: table rows are positional
+                  <tr key={r} className="border-b border-border last:border-b-0">
+                    {b.head.map((_, c) => (
+                      // biome-ignore lint/suspicious/noArrayIndexKey: table cells are positional
+                      <td key={c} className={`py-1.5 pe-6 last:pe-0 ${align(c)}`}>
+                        {inline(row[c] ?? [], `${key}-${r}-${c}`)}
+                      </td>
+                    ))}
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        );
+      }
+      case "code":
+        return (
+          <pre key={key} className="overflow-x-auto rounded-lg bg-surface-secondary px-3 py-2 font-mono text-body">
+            {b.text}
+          </pre>
+        );
+      case "quote":
+        return (
+          <blockquote key={key} className="flex flex-col gap-2 border-s-2 border-border ps-3 text-muted">
+            {b.children.map((c, i) => block(c, `${key}-${i}`))}
+          </blockquote>
+        );
+      case "rule":
+        return <hr key={key} className="border-border" />;
+    }
+  };
+
+  return (
+    <div className={`flex flex-col gap-2.5 ${className}`}>{parseMarkdown(source).map((b, i) => block(b, `b${i}`))}</div>
+  );
+}

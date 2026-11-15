@@ -1,0 +1,46 @@
+{
+  "name": "@opendash/apps",
+  "version": "0.0.0",
+  "private": true,
+  "license": "Apache-2.0",
+  "description": "Apps: the definition and its checks, the frame runtime an App is drawn with, the App's code check, and the frame document",
+  "type": "module",
+  "exports": {
+    "./protocol": "./src/protocol.ts",
+    "./select": "./src/select.ts",
+    "./build": "./src/check/check.ts",
+    "./limits": "./src/check/limits.ts",
+    "./runtime": "./src/check/runtime.ts",
+    "./frame": "./src/frame.ts",
+    "./kit-reference": "./src/check/types.ts",
+    "./runtime-bundle": "./src/runtime.generated.ts",
+    "./dashboard": "./src/dashboard/index.ts",
+    "./dashboard/actions": "./src/dashboard/actions.ts",
+    "./dashboard/revision": "./src/dashboard/revision.ts",
+    "./dashboard/service": "./src/dashboard/service.ts",
+    "./examples": "./src/examples/index.ts"
+  },
+  "scripts": {
+    "typecheck": "tsc -p tsconfig.json",
+    "test": "vitest run",
+    "build:runtime": "tsx scripts/build-runtime.ts"
+  },
+  "dependencies": {
+    "@opendash/tokens": "workspace:*",
+    "@tailwindcss/oxide": "4.3.3",
+    "@types/react": "19.3.0",
+    "echarts": "6.1.0",
+    "esbuild": "0.28.2",
+    "react": "19.3.0",
+    "react-dom": "19.3.0",
+    "tailwindcss": "4.3.3",
+    "typescript": "6.0.3",
+    "zod": "4.6.6"
+  },
+  "devDependencies": {
+    "@types/node": "24.19.1",
+    "@types/react-dom": "19.3.0",
+    "tsx": "4.23.15",
+    "vitest": "5.0.3"
+  }
+}

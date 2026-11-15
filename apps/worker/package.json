@@ -1,0 +1,35 @@
+{
+  "name": "@opendash/worker",
+  "version": "0.0.0",
+  "private": true,
+  "license": "Apache-2.0",
+  "type": "module",
+  "scripts": {
+    "dev": "tsx watch --clear-screen=false src/index.ts",
+    "start": "tsx src/index.ts",
+    "setup": "tsx scripts/setup.ts",
+    "typecheck": "tsc -p tsconfig.json",
+    "ask": "tsx scripts/ask.ts",
+    "ops": "tsx scripts/ops.ts",
+    "golden": "tsx scripts/golden.ts",
+    "trace": "tsx scripts/trace.ts",
+    "routines": "tsx scripts/routines.ts"
+  },
+  "dependencies": {
+    "@opendash/agent": "workspace:*",
+    "@opendash/apps": "workspace:*",
+    "@opendash/core": "workspace:*",
+    "@opendash/db": "workspace:*",
+    "@opendash/ee": "workspace:*",
+    "@opendash/email": "workspace:*",
+    "@opendash/evals": "workspace:*",
+    "@opendash/slack": "workspace:*",
+    "@opentelemetry/api": "1.9.1",
+    "@opentelemetry/exporter-trace-otlp-http": "0.222.0",
+    "@opentelemetry/resources": "2.11.0",
+    "@opentelemetry/sdk-trace-base": "2.11.0",
+    "@opentelemetry/sdk-trace-node": "2.11.0",
+    "pg-boss": "12.37.0",
+    "tsx": "4.23.15"
+  }
+}

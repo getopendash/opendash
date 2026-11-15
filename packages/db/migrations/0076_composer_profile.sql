@@ -1,0 +1,2 @@
+ALTER TABLE "app"."run" DROP CONSTRAINT "run_profile_check";--> statement-breakpoint
+ALTER TABLE "app"."run" ADD CONSTRAINT "run_profile_check" CHECK ("app"."run"."profile" in ('analyst', 'investigator', 'reviewer', 'modeler', 'drafter', 'curator', 'composer'));

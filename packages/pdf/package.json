@@ -1,0 +1,31 @@
+{
+  "name": "@opendash/pdf",
+  "version": "0.0.0",
+  "private": true,
+  "license": "Apache-2.0",
+  "description": "An answer drawn as a PDF: blocks from its gated text, laid out by react-pdf in Geist with a Noto font for each other script, charts the page's own",
+  "type": "module",
+  "exports": {
+    ".": "./src/index.ts"
+  },
+  "scripts": {
+    "typecheck": "tsc -p tsconfig.json",
+    "test": "vitest run"
+  },
+  "dependencies": {
+    "@react-pdf/renderer": "4.9.0",
+    "@resvg/resvg-js": "2.6.2",
+    "@opendash/charts": "workspace:*",
+    "@opendash/core": "workspace:*",
+    "@opendash/markdown": "workspace:*",
+    "@opendash/tokens": "workspace:*",
+    "fontkit": "2.0.4",
+    "react": "19.3.0"
+  },
+  "devDependencies": {
+    "@types/fontkit": "2.0.9",
+    "@types/react": "19.3.0",
+    "pdf-lib": "1.17.1",
+    "vitest": "5.0.3"
+  }
+}

@@ -1,0 +1,1 @@
+ALTER TABLE "app"."dashboard_version" ADD COLUMN "pins" jsonb;

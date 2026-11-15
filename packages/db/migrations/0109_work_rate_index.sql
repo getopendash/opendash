@@ -1,0 +1,1 @@
+CREATE INDEX "dashboard_work_event_rate_idx" ON "app"."dashboard_work_event" USING btree ("org_id","dashboard_id","by","at");

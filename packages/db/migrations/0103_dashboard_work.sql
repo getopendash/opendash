@@ -1,0 +1,1 @@
+ALTER TABLE "app"."dashboard" ADD COLUMN "work" jsonb;

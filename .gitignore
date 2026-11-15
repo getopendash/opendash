@@ -1,0 +1,41 @@
+# dependencies
+node_modules/
+.pnpm-store/
+
+# builds
+.next/
+dist/
+build/
+out/
+.turbo/
+coverage/
+*.tsbuildinfo
+
+# env and secrets
+.env
+.env.*
+!.env.example
+
+# local data
+.data/
+
+# test output
+playwright-report/
+test-results/
+
+# OS / editor
+.DS_Store
+.idea/
+.vscode/*
+!.vscode/extensions.json
+.playwright-mcp/
+
+# agent worktrees and local tool output
+.claude/worktrees/
+next-env.d.ts
+# Written by `next dev` into apps/web
+apps/web/AGENTS.md
+packages/evals/reports/
+
+# the maintainers' private notes (a separate repository lives here)
+internal/

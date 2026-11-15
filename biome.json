@@ -1,0 +1,171 @@
+{
+  "$schema": "./node_modules/@biomejs/biome/configuration_schema.json",
+  "vcs": {
+    "enabled": true,
+    "clientKind": "git",
+    "useIgnoreFile": true
+  },
+  "files": {
+    "includes": [
+      "**",
+      "!**/node_modules",
+      "!**/.next",
+      "!**/tokens.generated.ts",
+      "!**/brands.generated.ts",
+      "!**/brand-marks.generated.ts",
+      "!**/public/logos",
+      "!**/runtime.generated.ts",
+      "!**/*.grit",
+      "!docs",
+      "!*.md",
+      "!**/*.md",
+      "!**/migrations/meta",
+      "!**/__snapshots__",
+      "!**/packages/ui/vendor",
+      "!**/packages/ui/src/styles/opendash-theme.css"
+    ]
+  },
+  "formatter": {
+    "enabled": true,
+    "indentStyle": "space",
+    "indentWidth": 2,
+    "lineWidth": 120
+  },
+  "css": {
+    "parser": {
+      "tailwindDirectives": true
+    }
+  },
+  "linter": {
+    "enabled": true,
+    "rules": {
+      "recommended": true,
+      "nursery": {
+        "noTailwindArbitraryValue": "error"
+      }
+    }
+  },
+  "assist": {
+    "actions": {
+      "source": {
+        "organizeImports": "on"
+      }
+    }
+  },
+  "plugins": [
+    {
+      "path": "./tools/biome/no-style-prop.grit",
+      "includes": ["**/apps/**/*.tsx", "!**/packages/apps/**"]
+    },
+    {
+      "path": "./tools/biome/no-color-literals.grit",
+      "includes": [
+        "**/apps/**/*.ts",
+        "**/apps/**/*.tsx",
+        "**/packages/*/src/**/*.ts",
+        "**/packages/*/src/**/*.tsx",
+        "**/ee/src/**/*.ts",
+        "**/ee/src/**/*.tsx",
+        "!**/tokens.generated.ts",
+        "!**/brands.generated.ts",
+        "!**/packages/apps/**",
+        "!**/packages/agent/src/skills/**"
+      ]
+    },
+    {
+      "path": "./tools/biome/no-palette-classes.grit",
+      "includes": [
+        "**/apps/**/*.ts",
+        "**/apps/**/*.tsx",
+        "**/packages/*/src/**/*.ts",
+        "**/packages/*/src/**/*.tsx",
+        "**/ee/src/**/*.ts",
+        "**/ee/src/**/*.tsx",
+        "!**/packages/apps/**",
+        "!**/packages/agent/src/skills/**"
+      ]
+    },
+    {
+      "path": "./tools/biome/css-no-literals.grit",
+      "includes": ["**/*.css", "!**/packages/ui/src/styles/tokens.css", "!**/packages/apps/src/runtime/kit.css"]
+    },
+    {
+      "path": "./tools/biome/no-auth-schema.grit",
+      "includes": [
+        "**/apps/**/*.ts",
+        "**/apps/**/*.tsx",
+        "**/packages/**/*.ts",
+        "!**/packages/auth/**",
+        "!**/packages/db/**"
+      ]
+    },
+    {
+      "path": "./tools/biome/no-ee-import.grit",
+      "includes": [
+        "**/apps/**/*.ts",
+        "**/apps/**/*.tsx",
+        "**/packages/**/*.ts",
+        "**/packages/**/*.tsx",
+        "!**/apps/web/enterprise.ts",
+        "!**/apps/worker/src/enterprise.ts"
+      ]
+    },
+    {
+      "path": "./tools/biome/no-test-helpers.grit",
+      "includes": [
+        "**/apps/**/*.ts",
+        "**/apps/**/*.tsx",
+        "**/packages/**/*.ts",
+        "**/packages/**/*.tsx",
+        "!**/test/**",
+        "!**/*.test.ts",
+        "!**/*.test.tsx",
+        "!**/scripts/**",
+        "!**/packages/db/src/testing.ts"
+      ]
+    },
+    {
+      "path": "./tools/biome/no-agent-fs.grit",
+      "includes": ["**/packages/agent/src/**/*.ts"]
+    },
+    {
+      "path": "./tools/biome/no-bare-model.grit",
+      "includes": [
+        "**/apps/**/*.ts",
+        "**/apps/**/*.tsx",
+        "**/packages/**/*.ts",
+        "**/packages/**/*.tsx",
+        "**/ee/src/**/*.ts"
+      ]
+    },
+    {
+      "path": "./tools/biome/no-raw-db.grit",
+      "includes": [
+        "**/apps/**/*.ts",
+        "**/apps/**/*.tsx",
+        "**/packages/**/*.ts",
+        "**/ee/src/**/*.ts",
+        "!**/packages/db/**",
+        "!**/packages/connectors/**",
+        "!**/packages/evals/**"
+      ]
+    }
+  ],
+  "overrides": [
+    {
+      "includes": ["**/packages/apps/src/runtime/**"],
+      "linter": {
+        "rules": {
+          "nursery": {
+            "noTailwindArbitraryValue": "off"
+          }
+        }
+      },
+      "css": {
+        "parser": {
+          "tailwindDirectives": false
+        }
+      }
+    }
+  ]
+}

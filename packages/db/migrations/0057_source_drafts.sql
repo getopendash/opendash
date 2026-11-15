@@ -1,0 +1,2 @@
+ALTER TABLE "app"."proposal" ADD COLUMN "tables" text[] DEFAULT '{}'::text[] NOT NULL;--> statement-breakpoint
+CREATE UNIQUE INDEX "proposal_source_live_uq" ON "app"."proposal" USING btree ("org_id","connection_id") WHERE "app"."proposal"."from_query_run_id" is null and "app"."proposal"."status" = 'drafting';

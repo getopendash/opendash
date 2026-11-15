@@ -1,0 +1,2 @@
+ALTER TABLE "app"."thread" ADD CONSTRAINT "thread_folder_project_check" CHECK ("app"."thread"."folder_id" is null or "app"."thread"."project_id" is not null);--> statement-breakpoint
+ALTER TABLE "app"."artifact" ADD CONSTRAINT "artifact_folder_project_check" CHECK ("app"."artifact"."folder_id" is null or "app"."artifact"."project_id" is not null);

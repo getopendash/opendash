@@ -1,0 +1,31 @@
+{
+  "name": "@opendash/api",
+  "version": "0.0.0",
+  "private": true,
+  "license": "Apache-2.0",
+  "description": "The typed API: Zod contracts, the oRPC router and handlers, and the client. All oRPC wiring lives here.",
+  "type": "module",
+  "exports": {
+    ".": "./src/index.ts",
+    "./client": "./src/client.ts",
+    "./contract": "./src/contract.ts"
+  },
+  "scripts": {
+    "typecheck": "tsc -p tsconfig.json",
+    "test": "vitest run"
+  },
+  "dependencies": {
+    "@orpc/client": "2.0.0-beta.42",
+    "@orpc/contract": "2.0.0-beta.42",
+    "@orpc/server": "2.0.0-beta.42",
+    "@orpc/tanstack-query": "2.0.0-beta.42",
+    "@tanstack/react-query": "5.104.1",
+    "@opendash/core": "workspace:*",
+    "@opendash/db": "workspace:*",
+    "pg-boss": "12.37.0",
+    "zod": "4.6.6"
+  },
+  "devDependencies": {
+    "vitest": "5.0.3"
+  }
+}

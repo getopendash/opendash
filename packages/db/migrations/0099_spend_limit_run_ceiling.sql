@@ -1,0 +1,2 @@
+ALTER TABLE "app"."spend_limit" ADD COLUMN "run_ceiling_usd" numeric(12, 2) DEFAULT '1.5';--> statement-breakpoint
+ALTER TABLE "app"."spend_limit" ADD CONSTRAINT "spend_limit_run_ceiling_check" CHECK ("app"."spend_limit"."run_ceiling_usd" is null or "app"."spend_limit"."run_ceiling_usd" > 0);

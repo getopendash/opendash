@@ -1,0 +1,1 @@
+ALTER TABLE "app"."mcp_server" ADD COLUMN "key_format" text;

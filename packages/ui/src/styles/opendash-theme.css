@@ -1,0 +1,217 @@
+/*
+ * OpenDash theme for HeroUI v3 (@heroui/styles 3.2.x)
+ *
+ * Only base tokens and deliberate deviations are set; every other token (hovers, soft fills, field states, separators) is
+ * derived by HeroUI's own color-mix() rules in variables.css.
+ *
+ * Usage (packages/ui global CSS). Import bare, after HeroUI: the explicit @layer blocks below
+ * put tokens in theme.base (after HeroUI's theme.theme.base) and component overrides in the
+ * top-level components layer (after HeroUI's component rules), so ours win on source order.
+ *   @import "tailwindcss";
+ *   @import "@heroui/styles";
+ *   @import "./opendash-theme.css";
+ *
+ * Character: compact controls (28px default), 6px control radius, 8px cards, hairline edges
+ * instead of drop shadows. Overlays keep one soft shadow plus a hairline.
+ *
+ * Colour: the brand's lavender (#a79af4, the logo's Pair, --brand) is the accent.
+ * In light, buttons take a deeper lavender of the same hue: white on --accent (#7657dc) is
+ * 5.0:1 and --accent-hover (#6644c7) 6.5:1. In dark, the lavender itself, with ink labels
+ * (7.3:1). Accent-coloured text on surfaces must use --accent-soft-foreground or --link, never
+ * --accent.
+ */
+@layer theme {
+  @layer base {
+    :root,
+    :host {
+      --radius: 0.25rem;            /* scale: md 3, lg 4, xl 6, 2xl 8, 3xl 12 */
+      --field-radius: calc(var(--radius) * 1.5);  /* 6px, shared by buttons and fields */
+      --field-border-width: 1px;
+      --accent: #7657dc;
+      --accent-foreground: #ffffff;
+      --brand: #a79af4; /* the logo's lavender, the same in both themes: the mark, never text */
+      --font-sans: "Geist", ui-sans-serif, system-ui, sans-serif;
+      --font-mono: "Geist Mono", ui-monospace, SFMono-Regular, monospace;
+    }
+
+    :root,
+    .light,
+    [data-theme="light"] {
+      color-scheme: light;
+      --background: #f7f7fa;
+      --foreground: #15171e;
+      --surface: #ffffff;
+      --surface-secondary: #f0f1f4;
+      --surface-tertiary: #eaebef;
+      --overlay: #ffffff;
+      --muted: #666875;
+      --default: #ececf0;
+      --field-background: #ffffff;
+      --border: #e1e2e6;
+      --separator: #e7e8eb;
+      --segment: #ffffff;
+      --success: #1e8347;
+      --success-foreground: #ffffff;
+      --warning: #f2a02a;
+      --warning-foreground: #15171e;
+      --danger: #dd2630;
+      --danger-foreground: #ffffff;
+      --link: #6644c7;
+      --muted-tertiary: #868894;      /* 3.5:1 on surface: meta text, timestamps */
+      --border-tertiary: #8e9099;     /* 3.2:1: checkbox / radio outlines */
+      --accent-hover: #6644c7; /* HeroUI lightens; we darken so white text keeps contrast */
+      --backdrop: rgba(0, 0, 0, 0.45);
+      --accent-soft-foreground: color-mix(in oklab, var(--accent) 70%, var(--foreground) 30%);
+      --danger-soft-foreground: color-mix(in oklab, var(--danger) 75%, var(--foreground) 30%);
+      --warning-soft-foreground: color-mix(in oklab, var(--warning) 62%, var(--foreground) 45%);
+      --success-soft-foreground: color-mix(in oklab, var(--success) 70%, var(--foreground) 35%);
+
+      /* Edges, not shadows: hairline rings on surfaces, plain borders on fields */
+      --surface-shadow: 0 0 0 1px var(--border);
+      --field-border: var(--border);
+      --field-shadow: 0 0 0 0 transparent;
+      --overlay-shadow: 0 0 0 1px var(--border), 0 8px 24px -4px rgb(15 17 34 / 0.10);
+
+      --chart-1: #7657dc;
+      --chart-2: #14b8a6;
+      --chart-3: #f59e0b;
+      --chart-4: #ec4899;
+      --chart-5: #0ea5e9;
+      --chart-6: #6366f1;
+
+      /* Auth hero (the auth screens): the mesh gradient's nine points, row by row, and the floating glass cards. The
+         one sanctioned place for gradients and soft shadows. */
+      --hero-1: #d9c9ff;
+      --hero-2: #f2c7dc;
+      --hero-3: #c7b6f7;
+      --hero-4: #f7cdba;
+      --hero-5: #fce7ef;
+      --hero-6: #e8b9ea;
+      --hero-7: #fad9b8;
+      --hero-8: #fdebf2;
+      --hero-9: #f1b9dd;
+      --hero-glass-tint: #ffffffb8;
+      --hero-glass-stroke: #fffffff2;
+      --hero-shadow: #4c1d9524;
+
+      /* Letter avatars for organizations and projects (a project's comes from its id).
+         White letters: each is 4:1 or more against them, sky excepted (organizations). */
+      --avatar-sky: #0ea5e9;
+      --avatar-violet: #7c3aed;
+      --avatar-teal: #0d9488;
+      --avatar-rose: #e11d48;
+      --avatar-amber: #d97706;
+      --avatar-indigo: #4f46e5;
+      --avatar-foreground: #ffffff;
+
+      /* Source tiles: each database's brand colour, the same in both themes. */
+      --source-postgres: #336791;
+      --source-mysql: #00758f;
+      --source-clickhouse: #ffcc01;
+      --source-snowflake: #29b5e8;
+      --source-bigquery: #4285f4;
+      --source-foreground: #ffffff;
+      --source-clickhouse-foreground: #161616;
+    }
+
+    .dark,
+    [data-theme="dark"] {
+      color-scheme: dark;
+      --background: #0e0f12;  /* soft near-black: the sheet must read as lifted */
+      --foreground: #f3f3f6;
+      --surface: #16171c;
+      --surface-secondary: #1d1e24;
+      --surface-tertiary: #25262c;
+      --overlay: #1b1c22;
+      --muted: #9ea1ae;
+      --default: #212228;
+      --field-background: #16171c;
+      --border: #27282f;
+      --separator: #1e1f25;
+      --segment: #36373f;
+      --success: #42c070;
+      --success-foreground: #15171e;
+      --warning: #f8b74f;
+      --warning-foreground: #15171e;
+      --danger: #db3237;
+      --danger-foreground: #ffffff;
+      --accent: #a79af4; /* the brand's lavender, with ink labels */
+      --accent-foreground: #15171e;
+      --link: #b9aff7;
+      --muted-tertiary: #6e7079;      /* 3.8:1 on surface */
+      --border-tertiary: #6b6d75;     /* 3.6:1 */
+      --accent-hover: #bdb3f7; /* lighter on dark: ink labels keep their contrast */
+      --backdrop: rgba(0, 0, 0, 0.6);
+      --accent-soft-foreground: color-mix(in oklab, var(--accent) 62%, var(--foreground) 45%);
+      --danger-soft-foreground: color-mix(in oklab, var(--danger) 70%, var(--foreground) 35%);
+      --warning-soft-foreground: color-mix(in oklab, var(--warning) 80%, var(--foreground) 30%);
+      --success-soft-foreground: color-mix(in oklab, var(--success) 80%, var(--foreground) 30%);
+
+      /* Edges, not shadows: hairline rings on surfaces, plain borders on fields */
+      --surface-shadow: 0 0 0 1px var(--border);
+      --field-border: var(--border);
+      --field-shadow: 0 0 0 0 transparent;
+      --overlay-shadow: 0 0 0 1px var(--border), 0 8px 24px -4px rgb(0 0 0 / 0.5);
+
+      /* The same series as light, a step deeper for the dark band; validated (dataviz validate_palette, surface
+         #16171c): every check passes, pink beside cyan at the 6–8 CVD floor, so two or more series carry a legend. */
+      --chart-1: #8b78ec;
+      --chart-2: #159d8f;
+      --chart-3: #c47d10;
+      --chart-4: #de56a0;
+      --chart-5: #13a1c4;
+      --chart-6: #8a6af3;
+
+      --hero-1: #2e2a78;
+      --hero-2: #191632;
+      --hero-3: #100e1c;
+      --hero-4: #1b1736;
+      --hero-5: #0d0c15;
+      --hero-6: #261338;
+      --hero-7: #0c0b13;
+      --hero-8: #1f1030;
+      --hero-9: #45195a;
+      --hero-glass-tint: #191a21b3;
+      --hero-glass-stroke: #ffffff1f;
+      --hero-shadow: #00000099;
+    }
+  }
+}
+
+/* Density and shape. Same specificity as HeroUI's rules, later in the same layer.
+ * Control scale: SM 24 / MD 28 (default) / LG 32. Padding-x 8 / 10 / 12, icon gap 4. */
+@layer components {
+  .button { height: 1.75rem; padding-inline: 0.625rem; gap: 0.25rem; font-size: 0.8125rem; line-height: 1.25rem; border-radius: var(--field-radius); }
+  .button--sm { height: 1.5rem; padding-inline: 0.5rem; font-size: 0.75rem; }
+  .button--lg { height: 2rem; padding-inline: 0.75rem; font-size: 0.8125rem; }
+  .button--icon-only { width: 1.75rem; padding: 0; }
+  .button--icon-only.button--sm { width: 1.5rem; }
+  .button--icon-only.button--lg { width: 2rem; }
+  .button svg { width: 0.875rem; height: 0.875rem; }
+  .button--sm svg { width: 0.75rem; height: 0.75rem; }
+
+  .input,
+  .textarea { padding-block: 0.1875rem; padding-inline: 0.625rem; font-size: 0.8125rem; line-height: 1.25rem; }
+  .select__trigger { min-height: 1.75rem; padding-block: 0.1875rem; padding-inline: 0.625rem; font-size: 0.8125rem; line-height: 1.25rem; }
+  .search-field__group,
+  .number-field__group { height: 1.75rem; font-size: 0.8125rem; }
+
+  .tabs__list-container { border-radius: var(--radius-2xl); }
+  .tabs__list { padding: 2px; }
+  .tabs__tab { height: 1.5rem; padding-inline: 0.625rem; font-size: 0.8125rem; border-radius: var(--field-radius); }
+  .tabs__indicator { border-radius: var(--field-radius); }
+
+  .menu-item { min-height: 1.75rem; border-radius: var(--radius-lg); font-size: 0.8125rem; }
+  .card { border-radius: var(--radius-2xl); }
+}
+
+/* OpenDash-only tokens as Tailwind utilities (bg-chart-1, text-chart-2, text-brand, ...). */
+@theme inline {
+  --color-brand: var(--brand);
+  --color-chart-1: var(--chart-1);
+  --color-chart-2: var(--chart-2);
+  --color-chart-3: var(--chart-3);
+  --color-chart-4: var(--chart-4);
+  --color-chart-5: var(--chart-5);
+  --color-chart-6: var(--chart-6);
+}

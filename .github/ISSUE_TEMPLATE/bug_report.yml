@@ -1,0 +1,34 @@
+name: Bug report
+description: Something in OpenDash doesn't work as it should.
+labels: [bug]
+body:
+  - type: textarea
+    id: what
+    attributes:
+      label: What happened
+      description: What you did, what you expected, and what happened instead.
+    validations:
+      required: true
+  - type: textarea
+    id: reproduce
+    attributes:
+      label: How to reproduce it
+      description: Steps on the demo data (`pnpm demo:seed`) if you can. Never paste your own data, keys or credentials.
+    validations:
+      required: true
+  - type: input
+    id: version
+    attributes:
+      label: Version
+      description: The image tag or commit you run.
+  - type: dropdown
+    id: database
+    attributes:
+      label: Source database
+      options: [PostgreSQL, MySQL, ClickHouse, Other, Not related]
+  - type: textarea
+    id: logs
+    attributes:
+      label: Logs
+      description: The relevant lines from web or worker, with secrets removed.
+      render: text

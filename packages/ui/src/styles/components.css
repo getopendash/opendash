@@ -1,0 +1,832 @@
+/*
+ * Component rules the theme (opendash-theme.css) doesn't cover yet.
+ * Rule: no literal values. Everything references a token from the design theme or tokens.css.
+ * Each rule here is a proposal for the design theme; when the design adopts it, delete it from this file.
+ */
+@layer components {
+  /* Field labels, descriptions and selection controls at the compact 12–13px scale (HeroUI defaults to 14px). */
+  .label,
+  .checkbox__content,
+  .switch__content,
+  .radio__content,
+  .select__value {
+    font-size: var(--control-font-md);
+  }
+
+  .checkbox__content,
+  .switch__content,
+  .radio__content {
+    gap: var(--control-padding-sm);
+  }
+
+  .description {
+    font-size: var(--control-font-sm);
+  }
+
+  /* Radios are circles, as in the design (HeroUI uses rounded-lg, which the theme's small radius turns square). */
+  .radio__control,
+  .radio__indicator:empty::before {
+    border-radius: 50%;
+  }
+
+  /* Choice cards: the group's gap spaces the cards, not HeroUI's per-radio top margin. */
+  .radio-group.choice-cards[data-orientation="vertical"] [data-slot="radio"] {
+    margin-block-start: 0;
+  }
+
+  /* Tabs size to their content instead of stretching across the row. */
+  .tabs__list-container {
+    width: fit-content;
+  }
+
+  /* List box rows (select popovers, comboboxes) match menu rows. */
+  .list-box-item {
+    min-height: var(--control-height-md);
+    font-size: var(--control-font-md);
+  }
+
+  .modal__dialog {
+    border-radius: var(--radius-3xl);
+  }
+
+  /* Auth hero: the design's 3×3 mesh gradient as nine radial gradients at the same points, row by row. */
+  .auth-hero {
+    background-color: var(--hero-5);
+    background-image:
+      radial-gradient(at 0% 0%, var(--hero-1) 0%, transparent 55%),
+      radial-gradient(at 50% 0%, var(--hero-2) 0%, transparent 55%),
+      radial-gradient(at 100% 0%, var(--hero-3) 0%, transparent 55%),
+      radial-gradient(at 0% 50%, var(--hero-4) 0%, transparent 55%),
+      radial-gradient(at 55% 45%, var(--hero-5) 0%, transparent 55%),
+      radial-gradient(at 100% 50%, var(--hero-6) 0%, transparent 55%),
+      radial-gradient(at 0% 100%, var(--hero-7) 0%, transparent 55%),
+      radial-gradient(at 50% 100%, var(--hero-8) 0%, transparent 55%),
+      radial-gradient(at 100% 100%, var(--hero-9) 0%, transparent 55%);
+  }
+
+  /* Input groups at the same compact scale the design theme gives .input, with no divider before the prefix or
+     suffix (HeroUI defaults to 8px/12px padding and a hairline divider). */
+  .input-group {
+    min-height: var(--control-height-md);
+  }
+
+  .input-group__input {
+    align-self: stretch;
+    padding-block: 0;
+    padding-inline: var(--control-padding-md);
+    font-size: var(--control-font-md);
+  }
+
+  .input-group__prefix,
+  .input-group__suffix {
+    border-inline: 0;
+    font-size: var(--control-font-md);
+  }
+
+  .input-group__prefix {
+    padding-inline: var(--control-padding-md) 0;
+  }
+
+  .input-group__prefix + .input-group__input {
+    padding-inline-start: 0;
+  }
+
+  .input-group__suffix {
+    padding-inline: 0 var(--control-gap);
+  }
+
+  /* Auth and onboarding forms use the large control size (32), as drawn in the A–E screens. */
+  .auth-form :is(.input, .input-group, .select__trigger) {
+    min-height: var(--control-height-lg);
+  }
+
+  /* DataTable (packages/ui), framed and plain: a 32px header with 12px insets and no column
+     dividers, 13px cells with 8px vertical padding (36px rows, 52px with a second line), a 36px footer. */
+  .ui-table .table__column {
+    height: var(--control-height-lg);
+    padding-block: 0;
+    padding-inline: var(--control-padding-lg);
+    font-size: var(--text-small);
+    line-height: var(--text-small--line-height);
+    color: var(--muted-tertiary);
+  }
+
+  .ui-table .table__column::after {
+    content: none;
+  }
+
+  .ui-table .table__cell {
+    padding-block: var(--control-padding-sm);
+    padding-inline: var(--control-padding-lg);
+    font-size: var(--text-body);
+    line-height: var(--text-body--line-height);
+  }
+
+  .ui-table .table__row[data-href] {
+    cursor: var(--cursor-interactive);
+  }
+
+  .ui-table .table__footer {
+    min-height: calc(var(--control-height-lg) + var(--control-gap));
+    padding-block: 0;
+    padding-inline: var(--control-padding-lg);
+    font-size: var(--text-small);
+    color: var(--muted-tertiary);
+  }
+
+  /* Plain: a hairline under the header, no frame and no header card. */
+  .ui-table--plain .table__column {
+    @apply border-b border-separator;
+    background: transparent;
+    border-radius: 0;
+  }
+
+  .ui-table--plain .table__row .table__cell {
+    @apply border-separator;
+  }
+
+  /* A text cell of a list of records: one line, cut short past a width, so a long subject never pushes the columns off. */
+  .ui-table .table__column.ui-record-text {
+    white-space: nowrap;
+  }
+
+  .ui-table .table__cell.ui-record-text {
+    max-width: var(--spacing-record-text);
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  /* A group's heading row (Today, Yesterday…): 28px on the secondary surface, a micro label. */
+  .ui-table .table__row.ui-table__group .table__cell {
+    @apply bg-surface-secondary py-1.75;
+    font-size: var(--text-micro);
+    line-height: var(--text-micro--line-height);
+    font-weight: 500;
+    color: var(--muted-tertiary);
+  }
+
+  /* Traced Number (packages/ui): semibold, with a hairline underline; pressed, it's the number being traced. */
+  .traced-number {
+    font-weight: 600;
+    font-variant-numeric: tabular-nums;
+    color: var(--foreground);
+    text-decoration-line: underline;
+    text-decoration-color: var(--border-secondary);
+    text-decoration-thickness: from-font;
+    cursor: var(--cursor-interactive);
+  }
+
+  .traced-number:hover,
+  .traced-number--selected {
+    background: var(--accent-soft);
+    text-decoration-color: var(--accent);
+  }
+
+  .traced-number--unverified {
+    text-decoration-color: var(--warning);
+    text-decoration-style: dashed;
+  }
+
+  /* Path Label (packages/ui): Metric in the accent, Unmodelled in the warning tone. */
+  .path-label {
+    display: inline-flex;
+    align-items: center;
+    gap: var(--control-gap);
+    padding-inline: var(--control-padding-sm);
+    height: var(--control-height-sm);
+    font-size: var(--text-small);
+    font-weight: 500;
+  }
+
+  .path-label--metric {
+    background: var(--accent-soft);
+    color: var(--accent-soft-foreground);
+  }
+
+  .path-label--unmodelled {
+    background: var(--warning-soft);
+    color: var(--warning-soft-foreground);
+  }
+
+  /* Sparkline (packages/ui): bars by share of the largest, the latest in the accent. */
+  .sparkline {
+    display: flex;
+    align-items: flex-end;
+    gap: var(--spacing);
+  }
+
+  /* A metric tile that's a link as a whole (Home): its border answers the pointer. */
+  .metric-tile-link:hover > .metric-tile {
+    border-color: var(--border-secondary);
+  }
+
+  /* A metric tile while its query runs (MetricTile): the shapes of the value and the change line. */
+  .metric-tile__placeholder {
+    display: block;
+    border-radius: var(--radius);
+    background: var(--default);
+  }
+  .metric-tile__placeholder--value {
+    width: 40%;
+    height: calc(var(--spacing) * 7);
+  }
+  .metric-tile__placeholder--line {
+    width: 60%;
+    height: calc(var(--spacing) * 3);
+  }
+
+  .sparkline__bar {
+    flex: 1;
+    height: calc(var(--spark, 0) * 100%);
+    border-radius: var(--radius);
+    background: var(--accent-soft);
+  }
+
+  .sparkline__bar[data-last] {
+    background: var(--accent);
+  }
+
+  /* An insight's sparkline: its last month in the colour of the news (good or bad by the metric's direction). */
+  .sparkline[data-tone="danger"] .sparkline__bar[data-last] {
+    background: var(--danger);
+  }
+
+  .sparkline[data-tone="success"] .sparkline__bar[data-last] {
+    background: var(--success);
+  }
+
+  /* Code Editor (packages/ui): a textarea over its line marks, with a gutter; both follow its scroll. */
+  .code-editor {
+    font-family: var(--font-mono);
+    font-size: var(--text-code);
+    line-height: var(--text-code--line-height);
+  }
+
+  .code-editor__scrolled {
+    transform: translateY(var(--code-scroll, 0));
+  }
+
+  .code-editor__mark {
+    height: var(--text-code--line-height);
+  }
+
+  .code-editor__mark[data-mark="changed"] {
+    background: var(--accent-soft);
+    box-shadow: inset var(--code-mark-edge) 0 0 var(--accent);
+  }
+
+  .code-editor__mark[data-mark="error"] {
+    background: var(--danger-soft);
+  }
+
+  /* FitScale (packages/ui): the content keeps its natural size and is scaled to fit; hidden until measured. */
+  .fit-scale {
+    position: relative;
+  }
+
+  .fit-scale__content {
+    position: absolute;
+    inset-block-start: 0;
+    inset-inline-start: 0;
+    transform-origin: top left;
+    transform: scale(var(--fit-scale, 1));
+  }
+
+  .fit-scale:not([data-fit="shown"]) .fit-scale__content {
+    visibility: hidden;
+  }
+
+  /*
+   * The step a run is on: its label shimmers, in the theme's own text colours, instead of a spinner.
+   * With reduced motion it stays still, in the plain foreground.
+   */
+  .shimmer {
+    background-image: linear-gradient(
+      90deg,
+      var(--muted-tertiary) 0%,
+      var(--foreground) 45%,
+      var(--muted-tertiary) 90%
+    );
+    background-size: 200% 100%;
+    background-clip: text;
+    color: transparent;
+    animation: shimmer var(--shimmer-duration) linear infinite;
+  }
+
+  /* Where the answer's draft is being written. */
+  .draft-caret {
+    display: inline-block;
+    inline-size: var(--draft-caret-width);
+    block-size: var(--draft-caret-height);
+    vertical-align: text-bottom;
+    background: var(--accent);
+    animation: caret 1s steps(1) infinite;
+  }
+
+  /*
+   * Motion. Things that appear rise or fade in once, as they mount; a section that opens and closes stays
+   * mounted and grows from nothing to its content's height. Durations and easing are tokens (tokens.css).
+   */
+  .enter-fade {
+    animation: vg-fade var(--motion-base) var(--motion-ease) both;
+  }
+
+  .enter-rise {
+    animation: vg-rise var(--motion-base) var(--motion-ease) both;
+  }
+
+  /* A pane beside or over the page (Sources, a trace) slides in from the side it sits on. */
+  .enter-slide {
+    animation: vg-slide var(--motion-panel) var(--motion-ease-panel) both;
+  }
+
+  /*
+   * An App being built. The plan's blocks rise in turn; while the analyst works, a light runs along the
+   * preview's top edge; a new preview fades in over the last one; a saved version lands in the top bar.
+   */
+  .blueprint-block {
+    animation: vg-rise var(--motion-base) var(--motion-ease) both;
+  }
+
+  .blueprint-block:nth-child(2) {
+    animation-delay: var(--motion-stagger);
+  }
+
+  .blueprint-block:nth-child(3) {
+    animation-delay: calc(var(--motion-stagger) * 2);
+  }
+
+  .blueprint-block:nth-child(4) {
+    animation-delay: calc(var(--motion-stagger) * 3);
+  }
+
+  .blueprint-block:nth-child(5) {
+    animation-delay: calc(var(--motion-stagger) * 4);
+  }
+
+  .blueprint-block:nth-child(n + 6) {
+    animation-delay: calc(var(--motion-stagger) * 5);
+  }
+
+  .app-working-edge {
+    position: absolute;
+    inset-inline: 0;
+    top: 0;
+    z-index: 2;
+    height: var(--app-working-edge);
+    overflow: hidden;
+    pointer-events: none;
+    background: color-mix(in oklab, var(--accent) 18%, transparent);
+  }
+
+  .app-working-edge::after {
+    content: "";
+    position: absolute;
+    inset-block: 0;
+    inline-size: 32%;
+    background: linear-gradient(90deg, transparent, var(--accent), transparent);
+    animation: app-sweep 1.8s ease-in-out infinite;
+  }
+
+  .app-preview-in {
+    animation: vg-fade var(--motion-panel) var(--motion-ease) both;
+  }
+
+  .version-land {
+    animation: version-land 600ms var(--motion-ease) both;
+  }
+
+  /* The phone's sidebar drawer slides in from the left. */
+  .enter-drawer {
+    animation: vg-drawer var(--motion-panel) var(--motion-ease-panel) both;
+  }
+
+  /*
+   * The desktop sidebar's frame: its width eases between full and the rail of icons once someone toggles it (never
+   * on a load), clipping the sidebar inside, which keeps its own width; the new one fades in.
+   */
+  .sidebar-frame {
+    width: var(--spacing-sidebar);
+    overflow: hidden;
+  }
+
+  .sidebar-frame[data-rail] {
+    width: var(--spacing-rail);
+  }
+
+  .sidebar-frame[data-animate] {
+    transition: width var(--motion-panel) var(--motion-ease-panel);
+  }
+
+  .sidebar-frame[data-animate] > nav {
+    animation: vg-fade var(--motion-base) var(--motion-ease) both;
+  }
+
+  /* The analyst's panel (SidePanel): eases open beside the page or slides in over it, once someone moves it. Visibility
+     goes with it, so it stays visible while it closes and shows at once when it opens. */
+  .side-panel[data-animate] {
+    transition-property: width, margin, opacity, translate, transform, border-width, visibility;
+    transition-duration: var(--motion-panel);
+    transition-timing-function: var(--motion-ease-panel);
+  }
+
+  /* A menu or popover trigger's chevron turns as it opens (React Aria sets aria-expanded on the trigger). */
+  .lucide-chevron-down {
+    transition: rotate var(--motion-base) var(--motion-ease);
+  }
+
+  [aria-expanded="true"] > .lucide-chevron-down {
+    rotate: 180deg;
+  }
+
+  /* A <details> opens and closes to its content's height where the browser can (Chromium, recent Safari); elsewhere
+     it opens at once, as before. */
+  details::details-content {
+    block-size: 0;
+    overflow: clip;
+    transition:
+      block-size var(--motion-base) var(--motion-ease),
+      content-visibility var(--motion-base) var(--motion-ease) allow-discrete;
+  }
+
+  details[open]::details-content {
+    block-size: auto;
+  }
+
+  /* Placeholders waiting for their value (a tile's number, an answer's draft) breathe gently. */
+  .metric-tile__placeholder,
+  .draft-pill {
+    animation: vg-breathe 1.6s var(--motion-ease) infinite alternate;
+  }
+
+  /* HeroUI's Alert and tab panels have no motion of their own: an alert rises in, a tab's panel fades. */
+  .alert {
+    animation: vg-rise var(--motion-base) var(--motion-ease) both;
+  }
+
+  .tabs__panel {
+    animation: vg-fade var(--motion-base) var(--motion-ease) both;
+  }
+
+  /* Disclose (packages/ui): always mounted, inert while closed. Its one child clips what doesn't fit yet. */
+  .disclose {
+    display: grid;
+    grid-template-rows: 0fr;
+    opacity: 0;
+    transition:
+      grid-template-rows var(--motion-base) var(--motion-ease),
+      opacity var(--motion-base) var(--motion-ease);
+  }
+
+  .disclose[data-open] {
+    grid-template-rows: 1fr;
+    opacity: 1;
+  }
+
+  .disclose > * {
+    min-height: 0;
+    overflow: hidden;
+  }
+
+  /*
+   * An App the agent is working on: a soft accent light travels round its edge, with a faint
+   * glow inside, until the build ends. Above the App, never in the way of a press.
+   */
+  .app-building {
+    position: relative;
+    isolation: isolate;
+  }
+  .app-building::before {
+    content: "";
+    position: absolute;
+    inset: 0;
+    z-index: 2;
+    border-radius: inherit;
+    padding: var(--build-ring-width);
+    background: conic-gradient(
+      from var(--build-angle),
+      transparent 0deg,
+      var(--accent) 50deg,
+      transparent 130deg,
+      transparent 230deg,
+      var(--accent) 280deg,
+      transparent 360deg
+    );
+    mask:
+      var(--build-ring-mask) content-box,
+      var(--build-ring-mask);
+    mask-composite: exclude;
+    animation: build-orbit 4.5s linear infinite;
+    pointer-events: none;
+  }
+  .app-building::after {
+    content: "";
+    position: absolute;
+    inset: 0;
+    z-index: 2;
+    border-radius: inherit;
+    box-shadow: var(--build-glow);
+    pointer-events: none;
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    .app-building::before {
+      animation: none;
+    }
+    /* Still a sign it's working, without the motion. */
+    .app-working-edge::after {
+      animation: none;
+      inline-size: 100%;
+      opacity: 0.6;
+    }
+
+    .shimmer {
+      animation: none;
+      background-image: none;
+      color: var(--foreground);
+    }
+
+    .draft-caret {
+      animation: none;
+    }
+  }
+
+  /* A routine as one sentence (RoutineSentence): its chosen parts highlighted, an open one in amber. */
+  .routine-sentence {
+    font-size: var(--text-body);
+    line-height: var(--text-lead--line-height);
+    color: var(--foreground);
+  }
+
+  .routine-sentence[data-size="lg"] {
+    font-size: var(--text-title);
+    line-height: calc(var(--text-title--line-height) * 1.25);
+    font-weight: var(--text-heading--font-weight);
+  }
+
+  /* Inline, so it wraps like words and keeps its shape on each line it spans. */
+  .routine-sentence__part {
+    display: inline;
+    padding-inline: calc(var(--spacing) * 1.5);
+    box-decoration-break: clone;
+    -webkit-box-decoration-break: clone;
+    border-radius: var(--radius);
+    background: var(--accent-soft);
+    color: var(--accent-soft-foreground);
+  }
+
+  .routine-sentence__icon {
+    display: inline;
+    margin-inline-start: calc(var(--spacing) * 0.5);
+    vertical-align: middle;
+  }
+
+  /* A part that's a button is one box: it wraps inside itself, and holds the punctuation after it. */
+  button.routine-sentence__part {
+    display: inline-block;
+    max-width: 100%;
+    white-space: normal;
+    text-align: start;
+  }
+
+  .routine-sentence__keep {
+    white-space: nowrap;
+  }
+
+  button.routine-sentence__part:hover {
+    background: var(--accent-soft-hover);
+  }
+
+  /* Keyboard focus shows on the part itself, as on the cards it opens. */
+  button.routine-sentence__part:focus-visible {
+    outline: calc(var(--border-width) * 2) solid var(--focus);
+    outline-offset: var(--border-width);
+  }
+
+  .routine-sentence__part--open {
+    background: var(--warning-soft);
+    color: var(--warning-soft-foreground);
+    outline: var(--border-width) solid var(--warning);
+  }
+
+  /* A card among a few, one picked (TriggerCard, ConditionTile): a hairline, the accent once picked. */
+  .choice-card {
+    display: flex;
+    align-items: flex-start;
+    gap: calc(var(--spacing) * 3);
+    width: 100%;
+    padding: calc(var(--spacing) * 3);
+    border: var(--border-width) solid var(--border);
+    border-radius: var(--radius-lg);
+    background: var(--surface);
+    color: var(--foreground);
+    text-align: start;
+  }
+
+  .choice-card[data-kind="condition"] {
+    gap: calc(var(--spacing) * 2);
+    padding: calc(var(--spacing) * 2.5);
+  }
+
+  .choice-card:hover:not(:disabled) {
+    border-color: var(--border-secondary);
+  }
+
+  .choice-card:disabled {
+    opacity: 0.6;
+  }
+
+  .choice-card:focus-visible {
+    outline: calc(var(--border-width) * 2) solid var(--focus);
+    outline-offset: calc(var(--border-width) * 2);
+  }
+
+  .choice-card[data-selected] {
+    border-color: var(--accent);
+    background: var(--accent-soft);
+  }
+
+  .choice-card__icon {
+    display: grid;
+    place-items: center;
+    flex-shrink: 0;
+    width: calc(var(--spacing) * 8);
+    height: calc(var(--spacing) * 8);
+    border-radius: var(--radius);
+    background: var(--surface-secondary);
+    color: var(--muted);
+  }
+
+  .choice-card[data-kind="condition"] .choice-card__icon {
+    width: calc(var(--spacing) * 5);
+    height: calc(var(--spacing) * 5);
+    background: transparent;
+  }
+
+  .choice-card[data-selected] .choice-card__icon {
+    background: var(--accent);
+    color: var(--accent-foreground);
+  }
+
+  .choice-card[data-kind="condition"][data-selected] .choice-card__icon {
+    background: transparent;
+    color: var(--accent-soft-foreground);
+  }
+
+  .choice-card__description {
+    color: var(--muted);
+  }
+
+  .choice-card[data-selected] .choice-card__description {
+    color: var(--accent-soft-foreground);
+  }
+
+  .choice-card__radio {
+    flex-shrink: 0;
+    width: calc(var(--spacing) * 4);
+    height: calc(var(--spacing) * 4);
+    border: var(--border-width) solid var(--border-secondary);
+    background: var(--surface);
+  }
+
+  .choice-card[data-selected] .choice-card__radio {
+    border: calc(var(--spacing) * 1.25) solid var(--accent);
+  }
+
+  /* A metric to pick (MetricPickRow): a row of a list, the accent's soft tone once picked. */
+  .metric-pick-row {
+    width: 100%;
+    padding: calc(var(--spacing) * 2) calc(var(--spacing) * 3);
+    border-bottom: var(--border-width) solid var(--border);
+  }
+
+  .metric-pick-row:last-child {
+    border-bottom: 0;
+  }
+
+  .metric-pick-row:hover {
+    background: var(--default);
+  }
+
+  .metric-pick-row[data-selected] {
+    background: var(--accent-soft);
+  }
+}
+
+@keyframes shimmer {
+  from {
+    background-position: 100% 0;
+  }
+  to {
+    background-position: -100% 0;
+  }
+}
+
+@keyframes caret {
+  50% {
+    opacity: 0;
+  }
+}
+
+@keyframes vg-fade {
+  from {
+    opacity: 0;
+  }
+}
+
+@property --build-angle {
+  syntax: "<angle>";
+  inherits: false;
+  initial-value: 0deg;
+}
+
+@keyframes build-orbit {
+  to {
+    --build-angle: 360deg;
+  }
+}
+
+@keyframes app-sweep {
+  from {
+    transform: translateX(-110%);
+  }
+  to {
+    transform: translateX(330%);
+  }
+}
+
+@keyframes version-land {
+  0% {
+    opacity: 0;
+    transform: translateY(calc(var(--motion-rise) * -1)) scale(0.92);
+    box-shadow: 0 0 0 0 color-mix(in oklab, var(--accent) 45%, transparent);
+  }
+  60% {
+    opacity: 1;
+    transform: none;
+    box-shadow: 0 0 0 var(--motion-slide) color-mix(in oklab, var(--accent) 0%, transparent);
+  }
+}
+
+@keyframes vg-rise {
+  from {
+    opacity: 0;
+    transform: translateY(var(--motion-rise));
+  }
+}
+
+@keyframes vg-breathe {
+  to {
+    opacity: 0.55;
+  }
+}
+
+@keyframes vg-drawer {
+  from {
+    transform: translateX(-100%);
+  }
+}
+
+@keyframes vg-slide {
+  from {
+    opacity: 0;
+    transform: translateX(var(--motion-slide));
+  }
+}
+
+/* Links, buttons and rows change colour smoothly when hovered or chosen (HeroUI's own controls already do). The
+   theme switch doesn't animate: next-themes turns transitions off while it changes (app/providers.tsx). */
+@layer base {
+  /* Lets a size ease to and from `auto` (a <details> opening), where the browser can. */
+  :root {
+    interpolate-size: allow-keywords;
+  }
+
+  a,
+  button,
+  summary,
+  [role="option"],
+  [role="menuitem"],
+  [role="tab"] {
+    transition-property: color, background-color, border-color, text-decoration-color;
+    transition-duration: var(--motion-fast);
+    transition-timing-function: var(--motion-ease);
+  }
+}
+
+/* Reduced motion: nothing moves. Spinners stop, things appear at once, scrolling jumps. */
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    /* biome-ignore lint/complexity/noImportantStyles: reduced motion has to win over every component's own motion */
+    animation-duration: 0.01ms !important;
+    /* biome-ignore lint/complexity/noImportantStyles: as above */
+    animation-iteration-count: 1 !important;
+    /* biome-ignore lint/complexity/noImportantStyles: as above */
+    transition-duration: 0.01ms !important;
+    /* biome-ignore lint/complexity/noImportantStyles: as above */
+    scroll-behavior: auto !important;
+  }
+}
