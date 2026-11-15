@@ -19,13 +19,13 @@
     "@orpc/contract": "2.0.0-beta.42",
     "@orpc/server": "2.0.0-beta.42",
     "@orpc/tanstack-query": "2.0.0-beta.42",
-    "@tanstack/react-query": "5.104.1",
+    "@tanstack/react-query": "5.107.1",
     "@opendash/core": "workspace:*",
     "@opendash/db": "workspace:*",
-    "pg-boss": "12.37.0",
-    "zod": "4.6.6"
+    "pg-boss": "12.38.2",
+    "zod": "4.6.7"
   },
   "devDependencies": {
-    "vitest": "5.0.3"
+    "vitest": "5.1.0"
   }
 }

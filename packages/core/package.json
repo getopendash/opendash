@@ -20,21 +20,21 @@
     "test": "vitest run"
   },
   "dependencies": {
-    "@modelcontextprotocol/client": "2.3.1",
+    "@modelcontextprotocol/client": "2.4.0",
     "@opendash/apps": "workspace:*",
     "@opendash/connectors": "workspace:*",
     "@opendash/db": "workspace:*",
     "@opendash/evals": "workspace:*",
-    "@opentelemetry/api": "1.9.1",
+    "@opentelemetry/api": "1.10.0",
     "fflate": "0.8.3",
-    "pg-boss": "12.37.0",
+    "pg-boss": "12.38.2",
     "unpdf": "^2.1.0",
-    "yaml": "2.8.4",
-    "zod": "4.6.6"
+    "yaml": "2.9.1",
+    "zod": "4.6.7"
   },
   "devDependencies": {
-    "@modelcontextprotocol/server": "2.3.1",
+    "@modelcontextprotocol/server": "2.4.0",
     "tsx": "4.23.15",
-    "vitest": "5.0.3"
+    "vitest": "5.1.0"
   }
 }
