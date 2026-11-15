@@ -18,10 +18,22 @@ jobs:
         env:
           BASE: ${{ github.event.pull_request.base.sha }}
           HEAD: ${{ github.event.pull_request.head.sha }}
+          # A bot (Dependabot) can't sign off. Its own commits are let through only on a pull request a bot opened, so
+          # a person can't skip the check by naming a bot as a commit's author; a person's commits on that pull request
+          # are still checked.
+          BOT_PR: ${{ github.event.pull_request.user.type == 'Bot' }}
         run: |
           missing=0
           for sha in $(git rev-list "$BASE..$HEAD"); do
             author="$(git log -1 --format='%an <%ae>' "$sha")"
+            if [ "$BOT_PR" = "true" ]; then
+              case "$author" in
+                *"[bot]@users.noreply.github.com>")
+                  echo "$(git log -1 --format='%h' "$sha") is a bot's commit: no sign-off needed"
+                  continue
+                  ;;
+              esac
+            fi
             # The commit's trailers, parsed by git, one exactly "Signed-off-by: <its author>".
             if ! git log -1 --format='%(trailers:key=Signed-off-by,valueonly)' "$sha" | grep -qxF "$author"; then
               echo "::error::$(git log -1 --format='%h %s' "$sha") has no 'Signed-off-by: $author' (git commit -s)"
