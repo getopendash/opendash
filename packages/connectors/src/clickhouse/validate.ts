@@ -28,9 +28,6 @@ const SAFE_TABLE_FUNCTIONS = new Set([
  */
 const DENIED_FUNCTIONS = [/^dict/i, /^joinget/i, /^file$/i, /^filesystem/i, /^sleep(eachrow)?$/i];
 
-/** The format queryText asks for, which therefore shows up in EXPLAIN AST. */
-const EXPLAIN_FORMAT = "TabSeparatedRaw";
-
 /** Names written in the statement, from the server's syntax tree: identifiers, functions and aliases, not literals. */
 function astIdentifiers(roots: TreeNode[]): string[] {
   const out = new Set<string>();
@@ -99,18 +96,18 @@ function astProblem(roots: TreeNode[]): StatementCheck | null {
     const what = kind.replace(/Query$/, "").toUpperCase() || "That statement";
     return { ok: false, kind: "not_a_query", message: `${what} isn't allowed: OpenDash only runs SELECT queries.` };
   }
-  // The client adds FORMAT TabSeparatedRaw to read the explain output, so the root's last child is that; anything
-  // more is a FORMAT or INTO OUTFILE of the statement's own (a second FORMAT is already a syntax error).
-  const last = root.children.at(-1);
-  if (root.children.length !== 2 || last?.label !== `Identifier ${EXPLAIN_FORMAT}`) {
+  // AST labels are "Kind [name] (children N)"; compare by kind.
+  const kindOf = (n: TreeNode) => n.label.split(" ")[0];
+  // The client sends the statement as written and asks for the result's format in a setting, so the root holds the
+  // list of selects and nothing else of its own making. A further child is the statement's own FORMAT or INTO
+  // OUTFILE, or its SETTINGS, which the walk below refuses with its own message.
+  if (root.children.slice(1).some((c) => kindOf(c) !== "Set")) {
     return {
       ok: false,
       kind: "denied_clause",
       message: "FORMAT and INTO OUTFILE aren't allowed: OpenDash reads the result itself.",
     };
   }
-  // AST labels are "Kind [name] (children N)"; compare by kind.
-  const kindOf = (n: TreeNode) => n.label.split(" ")[0];
   const stack = [...roots];
   while (stack.length) {
     const n = stack.pop() as TreeNode;
