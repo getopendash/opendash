@@ -50,5 +50,6 @@ export async function createWorkspace(page: Page, name: string) {
   await expect(page.getByRole("heading", { name: "Create your organization" })).toBeVisible();
   await page.getByLabel("Organization name").fill(name);
   await page.getByRole("button", { name: "Create organization" }).click();
-  await expect(page.getByRole("heading", { name: "Connect your data" })).toBeVisible();
+  // A new workspace opens on the guided setup's welcome.
+  await expect(page.getByRole("heading", { name: /^Welcome, / })).toBeVisible({ timeout: 60_000 });
 }

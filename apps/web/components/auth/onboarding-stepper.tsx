@@ -1,9 +1,12 @@
 import { Check } from "lucide-react";
 import { Fragment } from "react";
 
-const steps = ["Organization", "Connect data", "Review", "Ask"];
+const steps = ["Workspace", "Data", "Model", "First question"];
 
-/** Onboarding progress. `current` is 1-based. Connectors stretch so the row fits the form width. */
+/**
+ * Where creating the workspace sits in getting started: the first of four, the other three being the guided setup's
+ * (/get-started). `current` is 1-based. Connectors stretch so the row fits the form width.
+ */
 export function OnboardingStepper({ current }: { current: number }) {
   return (
     <ol className="flex items-center gap-2 text-small">

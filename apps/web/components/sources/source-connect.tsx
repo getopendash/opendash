@@ -26,18 +26,21 @@ const endpoint = (v: Values) =>
 /**
  * Connecting a source: the settings and the live check, then a warning if the user can change data. The password goes to the server once per
  * test and is stored encrypted; the check runs in a worker, and this form polls its progress. `playground` starts the
- * ClickHouse form filled in with ClickHouse's public playground.
+ * ClickHouse form filled in with ClickHouse's public playground. `guided` is the form inside the guided setup
+ * (/get-started): Back returns to its Data step, and connecting goes on to its next one.
  */
 export function SourceConnect({
   kind,
   egress,
   queuedWarningMs,
   playground = false,
+  guided = false,
 }: {
   kind: ConnectKind;
   egress: string[];
   queuedWarningMs: number;
   playground?: boolean;
+  guided?: boolean;
 }) {
   const k = SOURCE_KINDS[kind];
   const [values, setValues] = useState<Values>(
@@ -88,7 +91,7 @@ export function SourceConnect({
   async function connect() {
     if (!test) return;
     setConnecting(true);
-    const result = await connectSource({ testId: test.id, acceptWriteAccess: accept });
+    const result = await connectSource({ testId: test.id, acceptWriteAccess: accept, guided });
     // Success redirects to Sources; anything returned is a reason it didn't happen.
     setConnecting(false);
     setMessage(result.message);
@@ -261,7 +264,10 @@ export function SourceConnect({
         </Alert>
       ) : null}
       <div className="flex items-center gap-2">
-        <Link href="/data/sources/new" className={`${buttonVariants({ variant: "ghost", size: "lg" })} gap-1`}>
+        <Link
+          href={guided ? "/get-started/data" : "/data/sources/new"}
+          className={`${buttonVariants({ variant: "ghost", size: "lg" })} gap-1`}
+        >
           <ArrowLeft className="size-4" aria-hidden />
           Back
         </Link>

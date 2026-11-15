@@ -51,10 +51,12 @@ test("signs up with the link in the email, and chooses a password", async () => 
   await expect(page.getByRole("heading", { name: "Create your organization" })).toBeVisible();
 });
 
-test("creates a workspace, and is taken to connect its data", async () => {
+test("creates a workspace, and is welcomed to the guided setup", async () => {
   await page.getByLabel("Organization name").fill(workspace);
   await page.getByRole("button", { name: "Create organization" }).click();
-  await expect(page.getByRole("heading", { name: "Connect your data" })).toBeVisible();
+  await expect(page.getByRole("heading", { name: /^Welcome, Maya\./ })).toBeVisible({ timeout: 60_000 });
+  // Skipping it opens OpenDash as it is, in the new workspace.
+  await page.getByRole("link", { name: "Skip setup" }).click();
   await expect(page.getByRole("button", { name: "Switch workspace" })).toContainText(workspace);
 });
 

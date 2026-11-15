@@ -18,6 +18,11 @@ The first beta: what's on `main` before the first tag.
 - **Error pages.** A page that isn't there, and one that failed to draw, say so in OpenDash's own words with a way
   on, inside the app and outside it; a failed page shows a reference that finds its line in the server's log.
 - **DashBench's PR subset in CI** (`.github/workflows/evals.yml`), on pull requests that touch what decides an answer.
+- **A guided setup for new workspaces** (`/get-started`). After creating a workspace you're welcomed with what
+  OpenDash does, then taken through the two things a first answer needs: data (ClickHouse's public playground in one
+  press, with its tables chosen for you, or your own database through the usual form) and a model (nothing to do
+  where the server has keys; a provider's key otherwise), and offered first questions that fit the source. Every
+  step can be skipped, and Home links back to it until setup is finished.
 - **Deleting a workspace, deleting your account, and taking your data with you.** Settings → Workspace (owners)
   deletes the workspace and everything in it at once, and downloads its data as a zip; Settings → Your data does the
   same for a person's own account and data. What's deleted, what stays and what an export holds is in

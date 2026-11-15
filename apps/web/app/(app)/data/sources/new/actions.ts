@@ -75,6 +75,8 @@ export async function startConnectionTest(input: SourceFormInput): Promise<TestR
 export async function connectSource(input: {
   testId: string;
   acceptWriteAccess: boolean;
+  /** From the guided setup (/get-started): it goes on to its next step, while the source is learned. */
+  guided?: boolean;
 }): Promise<{ message: string }> {
   const viewer = await admin();
   if (!viewer) return { message: "Only owners and admins can connect data sources." };
@@ -107,6 +109,6 @@ export async function connectSource(input: {
   }
   // The shell (sidebar setup card, nav) reads the workspace too, so refresh the whole layout, not just the page.
   revalidatePath("/", "layout");
-  // Watch it being learned.
-  redirect(`/data/sources/${id}`);
+  // Watch it being learned; the guided setup goes on meanwhile.
+  redirect(input.guided === true ? "/get-started/ai" : `/data/sources/${id}`);
 }

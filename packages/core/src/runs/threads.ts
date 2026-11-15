@@ -278,8 +278,12 @@ export async function listThreads(
 export async function hasAsked(tx: TenantTx, viewer: Viewer): Promise<boolean> {
   const [row] = await tx.execute<{ asked: boolean }>(sql`
     select exists (
-      select 1 from app.message
-      where org_id = ${viewer.orgId} and role = 'user' and author_id = ${viewer.userId}
+      select 1 from app.message m
+      join app.thread t on t.org_id = m.org_id and t.id = m.thread_id
+      where m.org_id = ${viewer.orgId} and m.role = 'user' and m.author_id = ${viewer.userId}
+        -- A question of their own: not the work OpenDash starts in their name (drafting definitions for the tables
+        -- they picked, a routine's run), which would tick "Ask your first question" before they'd asked anything.
+        and t.channel in ('web', 'slack', 'api')
     ) as asked`);
   return row?.asked ?? false;
 }

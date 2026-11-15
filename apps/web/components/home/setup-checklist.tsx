@@ -17,6 +17,12 @@ export function SetupChecklist({ progress }: { progress: SetupProgress }) {
             {progress.done} of {progress.total}
           </span>
         </h2>
+        {/* The guided setup does the same steps one at a time, with the sample data a press away. */}
+        {progress.next ? (
+          <Link href="/get-started" className="me-auto text-small text-link hover:underline">
+            Open the guided setup
+          </Link>
+        ) : null}
         <ProgressBar
           aria-label="Setup progress"
           size="sm"

@@ -25,7 +25,9 @@ pnpm dx
 and the worker. Every step can be re-run safely.
 
 Then open <http://localhost:3000/sign-up>, sign up with a name and email, open the link (without an email provider,
-development prints each link in the web server's log), choose a password, and create an organization.
+development prints each link in the web server's log), choose a password, and create an organization. A new workspace
+opens on the guided setup (`/get-started`): **Use sample data** connects ClickHouse's public playground in one press,
+and the model step asks for a provider's key when `.env.local` has none.
 
 - **A sample company:** `pnpm demo:seed` creates **Acme**, the DashBench `dash-saas` dataset, as its own database
   `opendash_demo` with a read-only user `opendash_demo_reader` (password `opendash-demo` locally). It is a database like
@@ -67,7 +69,7 @@ development prints each link in the web server's log), choose a password, and cr
 | `pnpm lint` / `pnpm lint:fix` | Biome lint and format (no ESLint or Prettier) |
 | `pnpm typecheck` | strict TypeScript across the workspace |
 | `pnpm test` | Vitest unit and integration tests; integration tests use the compose Postgres (`pnpm db:up`) |
-| `pnpm e2e` | the end-to-end browser tests (`apps/web/e2e`, Playwright): signing up, a workspace, connecting the sample database, in Chromium against a web app and worker it starts on a database of their own (`opendash_e2e`). Needs `pnpm db:up` and `pnpm mail:up`, and your own `pnpm dev` stopped. `pnpm e2e --serve` leaves the instance up to write a test against; `E2E_MODEL=1 pnpm e2e` also asks a question of the real model (it spends); `pnpm e2e -- --headed` passes options on. The first time: `pnpm --filter @opendash/web exec playwright install chromium` |
+| `pnpm e2e` | the end-to-end browser tests (`apps/web/e2e`, Playwright): signing up, a workspace, connecting the sample database, in Chromium against a web app and worker it starts on a database of their own (`opendash_e2e`). Needs `pnpm db:up` and `pnpm mail:up`, and your own `pnpm dev` stopped. `pnpm e2e --serve` leaves the instance up to write a test against; `E2E_MODEL=1 pnpm e2e` also asks a question of the real model (it spends); `E2E_PLAYGROUND=1 pnpm e2e` also connects the sample data in one press (it reaches ClickHouse's public playground); `pnpm e2e -- --headed` passes options on. The first time: `pnpm --filter @opendash/web exec playwright install chromium` |
 | `pnpm build` | builds every package and the web app |
 | `pnpm check:links` | checks relative links in the Markdown files |
 | `pnpm check:licenses` | checks every dependency's licence against the policy in [LICENSING](LICENSING.md) |

@@ -12,6 +12,9 @@ const WINDOWS = [
   "apps/web/components/shell/",
   "apps/web/components/auth/",
   "apps/web/app/(auth)/",
+  // The guided setup (/get-started) fills the window too.
+  "apps/web/components/onboarding/",
+  "apps/web/app/(onboarding)/",
   "apps/web/app/(public)/",
   "apps/web/app/dev/",
   "packages/ui/src/components/side-panel.tsx",

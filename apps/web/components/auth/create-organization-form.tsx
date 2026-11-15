@@ -49,7 +49,7 @@ export function CreateOrganizationForm({ host }: { host: string }) {
     // Its routines run at its creator's hours from the start; if this fails it stays UTC, changed later in Routines.
     await adoptWorkspaceTzAction(Intl.DateTimeFormat().resolvedOptions().timeZone).catch(() => null);
     // Onboarding continues with connecting data.
-    router.push("/data/sources/new");
+    router.push("/get-started");
     router.refresh();
   }
 

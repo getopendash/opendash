@@ -85,6 +85,7 @@ test("deleting a workspace asks for its name and the password, and it's gone at 
   });
   await page.getByRole("button", { name: /continue/i }).click();
   await createWorkspace(page, second);
+  await open(page, "/");
   await expect(page.getByRole("button", { name: "Switch workspace" })).toContainText(second);
 });
 
