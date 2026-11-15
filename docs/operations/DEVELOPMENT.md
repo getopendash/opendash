@@ -82,8 +82,9 @@ development prints each link in the web server's log), choose a password, and cr
 | `pnpm slack:manifest` / `pnpm slack:tunnel` | the Slack app manifest for your address, or for a local tunnel |
 
 **Tests that need other databases.** ClickHouse and MySQL tests skip with a notice unless the databases are running
-(`pnpm clickhouse:up`, `pnpm mysql:up`; or point `TEST_CLICKHOUSE_ADMIN_URL` / `TEST_MYSQL_ADMIN_URL` elsewhere). Each
-test file creates its own databases, so run single files while iterating on a shared development Postgres.
+(`pnpm clickhouse:up`, `pnpm mysql:up`; or point `TEST_CLICKHOUSE_ADMIN_URL` / `TEST_MYSQL_ADMIN_URL` elsewhere). CI
+starts both, and with `CI` set a missing server fails these tests instead of skipping them. Each test file creates its
+own databases, so run single files while iterating on a shared development Postgres.
 
 ## 4. Conventions
 

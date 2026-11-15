@@ -70,15 +70,33 @@ export interface SeededClickHouse {
 
 const CLICKHOUSE_ADMIN = () => process.env.TEST_CLICKHOUSE_ADMIN_URL ?? "http://opendash_owner:opendash@127.0.0.1:8124";
 
-/** Whether the opt-in ClickHouse (`pnpm clickhouse:up`) is running; ClickHouse tests skip when it isn't. */
-export async function clickhouseAvailable(): Promise<boolean> {
-  const url = new URL(CLICKHOUSE_ADMIN());
-  try {
-    const res = await fetch(`${url.protocol}//${url.host}/ping`, { signal: AbortSignal.timeout(1500) });
-    return res.ok;
-  } catch {
-    return false;
+/**
+ * Whether a test server is up. Locally a missing server means its tests skip. In CI (`CI` is set) the workflow starts
+ * every server, so a missing one is a broken build, not a reason to skip: this asks a few more times, then throws.
+ */
+async function serverAvailable(name: string, adminUrl: string, probe: () => Promise<boolean>): Promise<boolean> {
+  if (!process.env.CI) return probe();
+  for (let attempt = 1; attempt <= 5; attempt++) {
+    if (await probe()) return true;
+    if (attempt < 5) await new Promise((resolve) => setTimeout(resolve, 2000));
   }
+  const shown = new URL(adminUrl);
+  if (shown.password) shown.password = "***";
+  throw new Error(`${name} is not reachable at ${shown.toString()}, and CI runs its tests rather than skipping them.`);
+}
+
+/** Whether the opt-in ClickHouse (`pnpm clickhouse:up`) is running; ClickHouse tests skip when it isn't (CI: throws). */
+export async function clickhouseAvailable(): Promise<boolean> {
+  const admin = CLICKHOUSE_ADMIN();
+  const url = new URL(admin);
+  return serverAvailable("ClickHouse", admin, async () => {
+    try {
+      const res = await fetch(`${url.protocol}//${url.host}/ping`, { signal: AbortSignal.timeout(1500) });
+      return res.ok;
+    } catch {
+      return false;
+    }
+  });
 }
 
 /** The demo company in ClickHouse under a random prefix, with a read-only user (readonly = 2, SELECT grants). */
@@ -128,15 +146,18 @@ export interface SeededMySql {
 
 const MYSQL_ADMIN = () => process.env.TEST_MYSQL_ADMIN_URL ?? "mysql://root:opendash@127.0.0.1:3307";
 
-/** Whether the opt-in MySQL (`pnpm mysql:up`) is running; MySQL tests skip when it isn't. */
+/** Whether the opt-in MySQL (`pnpm mysql:up`) is running; MySQL tests skip when it isn't (CI: throws). */
 export async function mysqlAvailable(): Promise<boolean> {
-  try {
-    const conn = await mysql.createConnection({ uri: MYSQL_ADMIN(), connectTimeout: 1500 });
-    await conn.end();
-    return true;
-  } catch {
-    return false;
-  }
+  const admin = MYSQL_ADMIN();
+  return serverAvailable("MySQL", admin, async () => {
+    try {
+      const conn = await mysql.createConnection({ uri: admin, connectTimeout: 1500 });
+      await conn.end();
+      return true;
+    } catch {
+      return false;
+    }
+  });
 }
 
 /** The demo company in MySQL under a random prefix, with a read-only user (SELECT on its three databases). */

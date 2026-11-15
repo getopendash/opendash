@@ -29,8 +29,10 @@ jobs:
       - name: No private notes in the code (who, when, or a private document's number)
         run: pnpm check:notes
 
-  # The tests, in three jobs side by side: core and agent are most of the time between them (each against its own
-  # Postgres), the other packages together. One after another they took 18 minutes.
+  # The tests, in three jobs side by side: core and agent are most of the time between them, the other packages
+  # together. One after another they took 18 minutes. Each job has its own Postgres, ClickHouse and MySQL (the versions
+  # infra/docker-compose.yml runs): every package has tests against the other dialects, and with CI set a missing server
+  # fails them instead of skipping them (packages/evals/src/testing.ts).
   test:
     runs-on: ubuntu-latest
     strategy:
@@ -56,8 +58,31 @@ jobs:
         options: >-
           --health-cmd "pg_isready -U opendash_owner -d opendash"
           --health-interval 5s --health-timeout 5s --health-retries 20
+      clickhouse:
+        image: clickhouse/clickhouse-server:26.8.11
+        env:
+          CLICKHOUSE_USER: opendash_owner
+          CLICKHOUSE_PASSWORD: opendash
+          CLICKHOUSE_DEFAULT_ACCESS_MANAGEMENT: "1"
+        ports:
+          - 8124:8123
+        options: >-
+          --ulimit nofile=262144:262144
+          --health-cmd "wget -qO- http://127.0.0.1:8123/ping || exit 1"
+          --health-interval 5s --health-timeout 5s --health-retries 30
+      mysql:
+        image: mysql:8.4.10
+        env:
+          MYSQL_ROOT_PASSWORD: opendash
+        ports:
+          - 3307:3306
+        options: >-
+          --health-cmd "mysqladmin ping -h 127.0.0.1 -uroot -popendash --silent"
+          --health-interval 5s --health-timeout 5s --health-retries 30
     env:
       TEST_DATABASE_ADMIN_URL: postgres://opendash_owner:opendash@127.0.0.1:5444/postgres
+      TEST_CLICKHOUSE_ADMIN_URL: http://opendash_owner:opendash@127.0.0.1:8124
+      TEST_MYSQL_ADMIN_URL: mysql://root:opendash@127.0.0.1:3307
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
@@ -65,7 +90,7 @@ jobs:
           node-version-file: .nvmrc
       - run: corepack enable
       - run: pnpm install --frozen-lockfile
-      - name: Unit and tenancy tests (theme contrast, token freshness, RLS suite, partitions)
+      - name: Unit and tenancy tests (theme contrast, token freshness, RLS suite, partitions, ClickHouse and MySQL)
         run: pnpm turbo run test ${{ matrix.filter }}
 
   # The end-to-end browser tests (apps/web/e2e): a stranger's first hour in Chromium, against the web app and a worker
