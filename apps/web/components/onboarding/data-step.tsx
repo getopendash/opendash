@@ -64,7 +64,7 @@ export function DataStep({
   const [problem, setProblem] = useState<string | null>(null);
   const { test, slowWorker } = useConnectionTest(testId, queuedWarningMs);
 
-  async function useSample() {
+  async function startWithSample() {
     setProblem(null);
     setStarting(true);
     const started = await startSampleData().catch(() => null);
@@ -265,7 +265,7 @@ export function DataStep({
               ))}
             </ul>
             <span className="flex-1" />
-            <Button onPress={useSample} fullWidth>
+            <Button onPress={startWithSample} fullWidth>
               Use sample data
             </Button>
           </section>
