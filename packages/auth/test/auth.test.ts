@@ -513,8 +513,12 @@ describe("API keys", () => {
           body: JSON.stringify({ configId: "user", name: "waited" }),
         }),
       );
+      // Wait until the request blocks on this transaction. Only waits in this test's database count: other packages'
+      // tests share the server, and a wait of theirs would end the loop before the key is written.
       for (let i = 0; i < 100; i += 1) {
-        const [w] = await tx<{ n: number }[]>`select count(*)::int as n from pg_locks where not granted`;
+        const [w] = await tx<{ n: number }[]>`
+          select count(*)::int as n from pg_locks l join pg_stat_activity a on a.pid = l.pid
+          where not l.granted and a.datname = current_database()`;
         if (w?.n) break;
         await new Promise((r) => setTimeout(r, 50));
       }
