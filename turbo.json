@@ -13,7 +13,8 @@
       "dependsOn": ["^typecheck"]
     },
     "test": {
-      "dependsOn": ["^build"]
+      "dependsOn": ["^build"],
+      "env": ["CI", "TEST_DATABASE_ADMIN_URL", "TEST_CLICKHOUSE_ADMIN_URL", "TEST_MYSQL_ADMIN_URL"]
     }
   }
 }
