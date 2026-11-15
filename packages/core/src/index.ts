@@ -103,6 +103,17 @@ export {
 } from "./delivery/unsubscribe";
 export * from "./evals";
 export {
+  EXPORT_PAGE,
+  type ExportDeps,
+  type ExportKind,
+  type ExportManifest,
+  type ExportPart,
+  exportArchive,
+  exportFolder,
+  exportPage,
+} from "./export/archive";
+export { EXPORTED, type ExportSpec, NOT_EXPORTED } from "./export/tables";
+export {
   displayMetric,
   type MetricDirection,
   type MetricFormat,
@@ -292,6 +303,7 @@ export {
 export { loggableError, loggableStack } from "./loggable";
 export * as mcp from "./mcp";
 export * from "./ops";
+export { type PersonErased, personErased } from "./people/erase";
 export { dashboardEditableBy, dashboardReadableBy, threadReadableBy } from "./projects/access";
 export {
   assertCanAddToProject,

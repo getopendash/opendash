@@ -191,6 +191,7 @@ describe("writing", () => {
       "scim.owner_kept": {},
       "audit.exported": { format: "csv", rows: 10, days: 90 },
       "audit.purged": { rows: 10 },
+      "data.exported": { scope: "workspace" },
     };
     expect(Object.keys(samples).sort()).toEqual(Object.keys(AUDIT_ACTIONS).sort());
     for (const detail of Object.values(samples))

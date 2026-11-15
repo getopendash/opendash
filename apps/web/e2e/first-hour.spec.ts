@@ -8,6 +8,7 @@
  */
 import { expect, type Page, test } from "@playwright/test";
 import { buttonLink, emailTo } from "./inbox";
+import { open } from "./people";
 
 const stamp = Date.now();
 // `.internal` is never delivered on the internet; here it reaches only the local inbox.
@@ -20,15 +21,6 @@ const demo = JSON.parse(process.env.E2E_DEMO ?? "null") as {
   user: string;
   password: string;
 } | null;
-
-/** A page is ready to be typed into once its scripts run: before that a form posts as plain HTML and loses the click. */
-async function open(page: Page, path: string) {
-  // Tried again if it doesn't settle: a dev server compiling a page for the first time may reload it once.
-  await expect(async () => {
-    await page.goto(path, { timeout: 45_000 });
-    await page.waitForLoadState("networkidle", { timeout: 20_000 });
-  }).toPass({ timeout: 100_000 });
-}
 
 test.describe.configure({ mode: "serial" });
 

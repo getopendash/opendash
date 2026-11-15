@@ -18,6 +18,10 @@ The first beta: what's on `main` before the first tag.
 - **Error pages.** A page that isn't there, and one that failed to draw, say so in OpenDash's own words with a way
   on, inside the app and outside it; a failed page shows a reference that finds its line in the server's log.
 - **DashBench's PR subset in CI** (`.github/workflows/evals.yml`), on pull requests that touch what decides an answer.
+- **Deleting a workspace, deleting your account, and taking your data with you.** Settings → Workspace (owners)
+  deletes the workspace and everything in it at once, and downloads its data as a zip; Settings → Your data does the
+  same for a person's own account and data. What's deleted, what stays and what an export holds is in
+  [HOSTING](docs/operations/HOSTING.md). Migration `0111_org_deletion`.
 - **End-to-end browser tests** (`pnpm e2e`): signing up, creating a workspace and connecting a source, in a real
   browser against a running instance ([DEVELOPMENT](docs/operations/DEVELOPMENT.md)).
 

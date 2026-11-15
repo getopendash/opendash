@@ -155,6 +155,18 @@ connection check tells you if the user can change data.
   queue every 2 s: about 12 small queries a second per worker process when idle.
 - **Backups.** Back up Postgres (managed point-in-time recovery, or `pg_dump` and WAL archiving such as WAL-G) and
   `OPENDASH_KEK` separately, offline. Losing the KEK means re-entering every connection secret and model key.
+- **Deleting and exporting data.** An owner deletes a workspace under Settings → Workspace (its name typed, and
+  their password): its members, keys, sources, knowledge, conversations, dashboards and Slack connection go in one
+  statement, and nobody can open it a moment later. Its event, query, usage and audit history (the partitioned
+  tables, which no foreign key reaches) and its queued jobs are purged by the worker within about a minute, a batch at
+  a time; `app.org_deletion` keeps the workspace's id and when it was deleted and purged, nothing else. Anyone deletes
+  their own account under Settings → Your data: their sign-ins, sessions, keys and memberships go, a workspace only
+  they were in is deleted with it, and in a workspace they leave their private conversations and dashboards are
+  deleted while what they shared stays, under an id that names nobody. The only owner of a workspace others are in
+  must hand it over or delete it first. Both pages also download the data as a zip (a file per table, JSON lines, a
+  manifest of what's inside and what isn't): a workspace's for its owners, a person's own for themselves. Secrets are
+  never in an export, and neither is another person's private work. A deletion can't be undone, and backups still
+  hold the data until they expire: say so in your privacy notice, with how long you keep them.
 - **Secrets** live in your environment or `.env`. They are never logged and never put in prompts.
 - **Outbound calls** from tools and webhooks go through an SSRF guard, and inbound webhooks are verified by signature.
 

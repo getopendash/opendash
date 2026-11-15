@@ -8,6 +8,17 @@ export {
   inviteOnlyFromEnv,
 } from "./auth";
 export {
+  type AccountDeletion,
+  type AccountDeletionPlan,
+  type AccountExport,
+  type AccountWorkspace,
+  accountDeletionPlan,
+  accountExport,
+  confirmPassword,
+  deleteAccount,
+  deleteOrganization,
+} from "./deletion";
+export {
   type AuthCore,
   type AuthExtension,
   type AuthExtensionSource,

@@ -82,6 +82,7 @@ export const AUDIT_ACTIONS = {
   "scim.owner_kept": { label: "Kept an owner the directory removed", category: "scim" },
   "audit.exported": { label: "Exported the audit log", category: "audit" },
   "audit.purged": { label: "Deleted the audit history", category: "audit" },
+  "data.exported": { label: "Exported the workspace's data", category: "audit" },
 } as const satisfies Record<string, { label: string; category: AuditCategory }>;
 export type AuditAction = keyof typeof AUDIT_ACTIONS;
 
@@ -189,6 +190,8 @@ export interface AuditDetail {
   "scim.owner_kept": Record<string, never>;
   "audit.exported": { format: "csv" | "jsonl"; rows: number; days: number };
   "audit.purged": { rows: number };
+  /** An owner downloaded the workspace's data (Settings → Workspace). */
+  "data.exported": { scope: "workspace" };
 }
 
 /** How a row reads on the Audit log page, from its action and detail. */

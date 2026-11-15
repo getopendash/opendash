@@ -24,6 +24,7 @@ export {
 } from "./analytics";
 export { type HealthAlert, type OrgHealth, orgHealth } from "./health";
 export { createLogger, type Logger, type LogLevel, logger } from "./log";
+export { ORG_PURGE_BUDGET_MS, purgeDeletedOrgs } from "./org-purge";
 export {
   DEAD_LETTER_QUIET_SECONDS,
   partitionsChecked,

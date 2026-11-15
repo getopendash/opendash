@@ -26,6 +26,7 @@
     "@opendash/db": "workspace:*",
     "@opendash/evals": "workspace:*",
     "@opentelemetry/api": "1.9.1",
+    "fflate": "0.8.3",
     "pg-boss": "12.37.0",
     "unpdf": "^2.1.0",
     "yaml": "2.8.4",

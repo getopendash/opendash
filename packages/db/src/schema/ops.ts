@@ -73,6 +73,28 @@ export const opsTick = app
   .enableRLS();
 
 /**
+ * An organization that was deleted, written by a trigger on app.org as its row goes (so no deletion happens without
+ * one), and the system's alone. Its foreign keys took everything they reach in that statement; the rows no foreign
+ * key reaches (run_event, query_run, usage_event, audit_log, the audit chain, its queued jobs) are purged by the
+ * worker from here, which then sets `purged_at`. Kept afterwards as the record that the deletion finished: an id and
+ * two times, nothing of the organization's or of a person.
+ */
+export const orgDeletion = app
+  .table(
+    "org_deletion",
+    {
+      orgId: uuid("org_id").notNull().primaryKey(),
+      deletedAt: timestamp("deleted_at", { withTimezone: true }).notNull().defaultNow(),
+      purgedAt: timestamp("purged_at", { withTimezone: true }),
+    },
+    (t) => [
+      index("org_deletion_unpurged_idx").on(t.deletedAt).where(sql`${t.purgedAt} is null`),
+      pgPolicy("system", { as: "permissive", for: "all", to: systemRole, using: sql`true`, withCheck: sql`true` }),
+    ],
+  )
+  .enableRLS();
+
+/**
  * Usage by day, rolled up from usage_event for the last 2 days, idempotently, so it outlives the events' 13
  * months. By organization, day (UTC), kind, model and whose key paid.
  */

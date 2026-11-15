@@ -7,6 +7,7 @@ export { closeDatabases } from "./client";
 export { checkExtensions, lastTick, REQUIRED_EXTENSIONS } from "./health";
 export { isUuid, uuidv7, uuidv7Floor } from "./ids";
 export { createListener, directListener, type Listener } from "./listen";
+export { markOrgPurged, ORG_PURGE_BATCH, ORG_PURGED_TABLES, purgeOrgRows, unpurgedOrgs } from "./org-deletion";
 export * as schema from "./schema";
 export {
   type PublicTx,

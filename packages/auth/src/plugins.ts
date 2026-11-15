@@ -20,8 +20,9 @@ export function schemaPlugins(runtime: OrganizationRuntime = {}) {
       requireEmailVerificationOnInvitation: true,
       // A week to accept (Better Auth's default is 48 hours); resending starts a new week.
       invitationExpiresIn: INVITATION_TTL_SECONDS,
-      // Deleting a workspace isn't built: it has to take its data, keys, Slack and queued work with it, at once.
-      // Better Auth's own delete removed every member and then failed on app.org, leaving its keys working.
+      // Better Auth's own delete stays off: it removed every member and then failed on the product's rows, leaving the
+      // workspace's keys working. A workspace is deleted by `deleteOrganization` (deletion.ts), which takes its
+      // members, keys and data in one statement; the worker purges what no foreign key reaches.
       disableOrganizationDeletion: true,
       ...runtime,
     }),

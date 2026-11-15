@@ -23,5 +23,7 @@ gateway and its read-only guarantees, the answer gate, stored secrets, and the S
 - Customer databases are reached only by workers, through read-only sessions with server-side limits, and their
   connection secrets are encrypted with your key (`OPENDASH_KEK`).
 - Self-hosted instances are invite-only by default, and sign-in requires HTTPS.
+- A workspace's owners can delete it, and anyone can delete their own account, with everything that was theirs; both
+  can download their data first.
 
 See the [self-hosting guide](docs/operations/HOSTING.md) for how to run it safely.

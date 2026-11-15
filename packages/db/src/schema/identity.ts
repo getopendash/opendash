@@ -11,14 +11,20 @@ const timestamps = {
   updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
 };
 
-/** One row per organization. id = auth.organization.id; created by the auth package when an organization is. */
+/**
+ * One row per organization. id = auth.organization.id; created by the auth package when an organization is.
+ * Deleting the auth organization deletes this row and, through it, every tenant table's rows for it, in the one
+ * statement (`deleteOrganization` in the auth package is the only caller; Better Auth's own delete stays off). What
+ * no foreign key reaches (the partitioned tables, queued jobs) is purged afterwards from `org_deletion`, which a
+ * trigger on this table writes in the same transaction.
+ */
 export const org = app
   .table(
     "org",
     {
       id: uuid("id")
         .primaryKey()
-        .references(() => organization.id, { onDelete: "restrict" }),
+        .references(() => organization.id, { onDelete: "cascade" }),
       name: text("name").notNull(),
       plan: text("plan").notNull().default("free"),
       status: text("status").notNull().default("active"),

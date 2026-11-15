@@ -13,8 +13,11 @@ let t: TestDatabase;
 const orgA = uuidv7();
 const orgB = uuidv7();
 let tables: string[] = [];
-/** The system's alone: RLS on and only the system policy, so no tenant reads a row (the ops tick's tables). */
-const SYSTEM_ONLY = new Set(["ops_tick"]);
+/**
+ * The system's alone: RLS on and only the system policy, so no tenant reads a row (the ops tick's tables, and the
+ * record of organizations that were deleted).
+ */
+const SYSTEM_ONLY = new Set(["ops_tick", "org_deletion"]);
 
 beforeAll(async () => {
   t = await freshDatabase();

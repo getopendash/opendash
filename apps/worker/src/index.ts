@@ -111,6 +111,7 @@ import {
   partitionsChecked,
   proposeMissingStarterPacks,
   proposeStarterPack,
+  purgeDeletedOrgs,
   purgeSlackInbound,
   purgeSlackInstalls,
   purgeSlackLinks,
@@ -932,6 +933,11 @@ await boss.work(systemTickQueue.name, async () => {
       (now) => releaseDueRuns({ ...ops, withTenant: tenantDeps.withTenant, boss }, now),
       // Runs that waited longer than pg-boss keeps a job: failed, so the spend room they held goes back.
       (now) => failStaleQueuedRuns({ ...ops, withTenant: tenantDeps.withTenant, boss }, now),
+      // Workspaces that were deleted: their queued jobs, and the history no foreign key reaches, a batch at a time.
+      async () => {
+        const purged = await purgeDeletedOrgs({ ...ops, boss });
+        if (purged.purged || purged.rows || purged.jobs) log("deleted organizations purged", purged);
+      },
       // Done tasks whose outcome is due.
       (now) => queueDueOutcomeChecks({ ...ops, withTenant: tenantDeps.withTenant, boss }, now),
       // Audit rows written since the last minute, sealed into each organization's chain (ee/).
