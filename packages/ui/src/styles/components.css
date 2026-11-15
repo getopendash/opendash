@@ -297,6 +297,22 @@
     visibility: hidden;
   }
 
+  /* A screen's own content, centred in the room it has and shrunk to it when it's taller (the guided setup). */
+  .fit-scale--center {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+  }
+
+  .fit-scale--center > .fit-scale__content {
+    position: static;
+    flex: none;
+    display: flex;
+    justify-content: center;
+    width: 100%;
+    transform-origin: center;
+  }
+
   /*
    * The step a run is on: its label shimmers, in the theme's own text colours, instead of a spinner.
    * With reduced motion it stays still, in the plain foreground.

@@ -15,7 +15,7 @@ function Traced({ children }: { children: ReactNode }) {
 function Scene({ title, line, children }: { title: string; line: string; children: ReactNode }) {
   return (
     <li className={glass}>
-      <div aria-hidden className="flex min-h-28 flex-col justify-center gap-2.5 rounded-2xl bg-surface p-3.5">
+      <div aria-hidden className="flex min-h-24 flex-col justify-center gap-2 rounded-2xl bg-surface p-3.5">
         {children}
       </div>
       <div className="flex flex-col gap-0.5 px-0.5">

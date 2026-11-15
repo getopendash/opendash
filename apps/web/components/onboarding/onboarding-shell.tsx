@@ -1,5 +1,5 @@
 import { buttonVariants } from "@heroui/react";
-import { OpenDashLogo } from "@opendash/ui";
+import { FitScale, OpenDashLogo } from "@opendash/ui";
 import { Check } from "lucide-react";
 import Link from "next/link";
 import { Fragment, type ReactNode } from "react";
@@ -14,7 +14,7 @@ const COUNTED: { key: OnboardingStepKey; label: string; href: string }[] = [
 
 /**
  * The guided setup's frame (/get-started): the whole window on the brand's gradient, with the logo, where the person
- * is in the three steps, and the way out. Every step can be left: "Skip setup" opens OpenDash as it is, and what's
+ * is in the three steps, and the way out. A step fits the window (no scrolling from a tablet's width up). Every step can be left: "Skip setup" opens OpenDash as it is, and what's
  * done so far stays done.
  */
 export function OnboardingShell({
@@ -28,7 +28,7 @@ export function OnboardingShell({
   children: ReactNode;
 }) {
   return (
-    <div className="auth-hero flex min-h-dvh flex-col">
+    <div className="auth-hero flex min-h-dvh flex-col md:h-dvh md:overflow-hidden">
       <header className="flex items-center gap-4 px-5 py-4 sm:px-8 sm:py-5">
         <Link href="/" aria-label="OpenDash" className="flex flex-1 items-center text-foreground">
           <OpenDashLogo className="h-7" label={null} />
@@ -77,7 +77,13 @@ export function OnboardingShell({
           </Link>
         </div>
       </header>
-      <main className="flex flex-1 flex-col items-center justify-center px-4 pt-2 pb-12 sm:px-8">{children}</main>
+      {/* From a tablet's width up the step fits the window, shrunk a little when the window is short, so nothing
+          scrolls; on a phone, where its parts stack, the page scrolls as pages do. */}
+      <main className="flex min-h-0 flex-1 flex-col px-4 pt-2 pb-8 sm:px-8">
+        <FitScale center minScale={0} className="min-h-0 flex-1">
+          {children}
+        </FitScale>
+      </main>
     </div>
   );
 }

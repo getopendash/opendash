@@ -34,13 +34,13 @@ export default async function WelcomePage() {
   ];
   return (
     <OnboardingShell current="welcome" done={{}}>
-      <div className="flex w-full max-w-4xl flex-col items-center gap-9 text-center">
-        <div className="enter-rise flex flex-col items-center gap-4">
-          <Pair size={104} interactive />
+      <div className="flex w-full max-w-4xl flex-col items-center gap-7 text-center">
+        <div className="enter-rise flex flex-col items-center gap-3">
+          <Pair size={64} interactive />
           <h1 className="text-hero">
             Welcome, {first}. <span className="text-link">Let's get your first answer.</span>
           </h1>
-          <p className="max-w-xl text-heading font-normal leading-relaxed text-muted">
+          <p className="max-w-2xl text-heading font-normal leading-relaxed text-muted">
             OpenDash is an analyst for your data. Ask a question in plain language, and it writes the queries, checks
             the math in code, and shows you where every number came from.
           </p>

@@ -14,6 +14,7 @@
  * question is skipped without one. Stop your own `pnpm dev` first: Next.js runs one dev server per folder.
  */
 import { spawn, spawnSync } from "node:child_process";
+import { rmSync } from "node:fs";
 import path from "node:path";
 import { loadRootEnv } from "./load-env.mjs";
 
@@ -154,6 +155,11 @@ function logs() {
   for (const { name, lines } of servers)
     console.error(`\n--- ${name} (its last lines) ---\n${lines.join("").slice(-6000)}`);
 }
+
+// The dev server's cache from an earlier run: started on it again, Turbopack can answer every page load with "HMR
+// hash mismatch" and reload the page without end (seen 2026-11-15, cured by removing it). A cold start costs a few
+// seconds, and the pages the tests open first are warmed below.
+rmSync(path.join(root, "apps/web/.next/dev"), { recursive: true, force: true });
 
 console.log("▸ The web app and a worker");
 const web = start("web", ["exec", "next", "dev", "--port", PORT], path.join(root, "apps/web"));

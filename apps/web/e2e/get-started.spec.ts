@@ -38,6 +38,14 @@ test("welcomes a new workspace: what OpenDash does, and the two things a first a
   }
   await expect(page.getByText("Your data", { exact: true })).toBeVisible();
   await expect(page.getByText("A model", { exact: true })).toBeVisible();
+  // It fits the window: nothing to scroll, on a laptop's screen or a shorter one.
+  for (const height of [720, 600]) {
+    await page.setViewportSize({ width: 1280, height });
+    await expect
+      .poll(() => page.evaluate(() => document.documentElement.scrollHeight <= window.innerHeight))
+      .toBe(true);
+  }
+  await page.setViewportSize({ width: 1280, height: 720 });
   await page.getByRole("link", { name: "Get started" }).click();
   await expect(page.getByRole("heading", { name: "Where's your data?" })).toBeVisible();
   // Both ways in: the sample data, and a database of one's own.

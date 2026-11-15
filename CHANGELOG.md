@@ -22,7 +22,8 @@ The first beta: what's on `main` before the first tag.
   OpenDash does, then taken through the two things a first answer needs: data (ClickHouse's public playground in one
   press, with its tables chosen for you, or your own database through the usual form) and a model (nothing to do
   where the server has keys; a provider's key otherwise), and offered first questions that fit the source. Every
-  step can be skipped, and Home links back to it until setup is finished.
+  step can be skipped, and Home links back to it until setup is finished. Each step fits the window, shrinking a
+  little on a short one, so nothing scrolls (on a phone, where its parts stack, it scrolls as pages do).
 - **Deleting a workspace, deleting your account, and taking your data with you.** Settings → Workspace (owners)
   deletes the workspace and everything in it at once, and downloads its data as a zip; Settings → Your data does the
   same for a person's own account and data. What's deleted, what stays and what an export holds is in
