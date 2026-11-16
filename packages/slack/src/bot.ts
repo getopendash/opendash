@@ -41,6 +41,7 @@ import { type IncomingFile, readFiles } from "./files";
 import { HOME_LINK, HOME_UNLINK, publishSlackHome } from "./home";
 import { DEDUPE_TTL_MS, inboundKeyOf, teamOf } from "./inbound";
 import { LEARNING_APPROVE, LEARNING_REJECT, LEARNING_REVERT, LEARNING_SUGGEST, REVERTED } from "./learning";
+import { tellPrivately, threadShownFor } from "./privately";
 import { FEEDBACK_ACTION, MEMORY_UNDO, NEXT_ACTIONS, quiet, RATE_ACTIONS } from "./reply";
 import { findingChoice, ROUTINE_FINDING } from "./routine";
 
@@ -218,11 +219,9 @@ export function createSlackBot(deps: SlackBotDeps, config: SlackBotConfig): { bo
     dedupeTtlMs: DEDUPE_TTL_MS,
   });
 
-  /** Says something to the asker only: privately in a channel, in the thread in a direct message. */
-  const tell = async (thread: Thread<unknown>, message: Asked, text: string) => {
-    if (thread.isDM) await thread.post(text);
-    else await thread.postEphemeral(message.author.userId, text, { fallbackToDM: true });
-  };
+  /** Says something to the asker only: privately in a channel, where Slack shows it; in a direct message, as usual. */
+  const tell = async (thread: Thread<unknown>, message: Asked, text: string) =>
+    tellPrivately(thread, message.author.userId, text, threadShownFor(message.raw));
 
   /**
    * A handler's question, marked handled once it's done: one that asked was marked in the asking, and
@@ -274,8 +273,7 @@ export function createSlackBot(deps: SlackBotDeps, config: SlackBotConfig): { bo
           Actions([LinkButton({ label: "Link account", url: `${deps.webUrl}/slack/link#${token}`, style: "primary" })]),
         ],
       });
-      if (thread.isDM) await thread.post(link);
-      else await thread.postEphemeral(message.author.userId, link, { fallbackToDM: true });
+      await tellPrivately(thread, message.author.userId, link, threadShownFor(message.raw));
       return;
     }
     // Its record, marked asked as it's asked: a message's own, or the press it stands for.
