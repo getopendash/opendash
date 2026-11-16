@@ -148,6 +148,9 @@ describe("a press under an answer in Slack", () => {
     expect(told(PRIYA, since)).toEqual(["Thanks, noted."]);
     await deliver(press(a.ts, MALLORY, up));
     expect(told(MALLORY, since)).toEqual(["Only the person who asked can rate this answer."]);
+    // A press in the answer's thread: told in that thread.
+    const [said] = fake.calls.slice(since).filter((c) => c.method === "chat.postEphemeral" && c.args.user === MALLORY);
+    expect(said?.args).toMatchObject({ channel: "C0SALES", thread_ts: a.ts });
     expect(await feedback(a.runId)).toHaveLength(1);
   });
 
@@ -511,6 +514,10 @@ describe("a finding a routine posted in a channel", () => {
       let since = fake.calls.length;
       await choose(MALLORY, { a: "dismiss", i: id, r: "known_issue" });
       expect(told(MALLORY, since)[0]).toBe("Link your Slack account to OpenDash first.");
+      // Said in the channel: the post has no replies, and Slack hides a private message in a thread without any.
+      const [said] = fake.calls.slice(since).filter((c) => c.method === "chat.postEphemeral");
+      expect(said?.args).toMatchObject({ channel: "C0GROWTH", user: MALLORY });
+      expect(said?.args.thread_ts).toBeUndefined();
       // A member can't dismiss it for everyone.
       since = fake.calls.length;
       await choose(PRIYA, { a: "dismiss", i: id, r: "known_issue" });

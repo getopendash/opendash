@@ -21,6 +21,7 @@ import {
 } from "@opendash/core";
 import type { PublicTx, SystemTx } from "@opendash/db";
 import type { Chat } from "chat";
+import { tellPrivately } from "./privately";
 
 /**
  * How long Chat SDK remembers a message it has handled (its `dedupeTtlMs`): one handed to it again within this is
@@ -193,9 +194,20 @@ export interface ReplayDeps extends GateDeps {
 export const LOST_QUESTION = "I lost that question on the way in. Please ask it again.";
 
 /**
+ * Whether a lost question's thread is one Slack shows (privately.ts). A message said in the channel names its thread
+ * after itself, and the bot never answered it, so that thread has no replies. A press is on the bot's own card, which
+ * sits in its thread.
+ */
+export function lostThreadShown(d: Pick<DueSlackInbound, "kind" | "key" | "slackThreadId">): boolean {
+  if (d.kind === "press") return true;
+  const ts = d.key.slice(d.key.lastIndexOf(":") + 1);
+  return !d.slackThreadId.endsWith(`:${ts}`);
+}
+
+/**
  * The worker's replay (slack.inbound.check): each question nothing handled in time, handed to the bot again; past its
- * last try, the person told privately, in its thread. What's said goes with the team's own token, and a team that
- * took the app back meanwhile is told nothing. Returns what it did, for the log.
+ * last try, the person told privately, where Slack shows it. What's said goes with the team's own token, and a team
+ * that took the app back meanwhile is told nothing. Returns what it did, for the log.
  */
 export async function replaySlackInbound(
   deps: ReplayDeps,
@@ -220,11 +232,7 @@ export async function replaySlackInbound(
     await slack
       .withBotToken(
         token,
-        async () => {
-          const thread = bot.thread(d.slackThreadId);
-          if (thread.isDM) await thread.post(LOST_QUESTION);
-          else await thread.postEphemeral(d.slackUserId, LOST_QUESTION, { fallbackToDM: true });
-        },
+        () => tellPrivately(bot.thread(d.slackThreadId), d.slackUserId, LOST_QUESTION, lostThreadShown(d)),
         { installationId: d.teamId },
       )
       .catch(() => {});

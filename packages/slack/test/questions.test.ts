@@ -208,9 +208,53 @@ describe("a question from Slack", () => {
     const told = fake.of("chat.postEphemeral").slice(before);
     expect(told).toHaveLength(1);
     expect(told[0]?.args).toMatchObject({ channel: "C0SALES", user: PRIYA });
+    // Said in the channel: the question started no thread, and Slack hides a private message in one with no replies.
+    expect(told[0]?.args.thread_ts).toBeUndefined();
     expect(JSON.stringify(told[0]?.args)).toContain(LOST_QUESTION.slice(0, 20));
     expect(await record(`m:C0SALES:${at}`)).toMatchObject({ status: "lost", envelope: null });
     expect(await asked(at)).toBe(0);
+  }, 60_000);
+
+  it("tells someone who hasn't linked their account how to, where Slack shows it", async () => {
+    const MALLORY = "UMALLORY";
+    const said = (at: string, thread?: string): SlackEnvelope => ({
+      eventType: "events_api",
+      body: {
+        type: "event_callback",
+        team_id: TEAM.teamId,
+        event: {
+          type: "app_mention",
+          channel: "C0SALES",
+          user: MALLORY,
+          ts: at,
+          ...(thread ? { thread_ts: thread } : {}),
+          text: `<@${TEAM.botUserId}> Which plans churned most?`,
+        },
+      },
+    });
+    const linkTold = (since: number) =>
+      fake
+        .of("chat.postEphemeral")
+        .slice(since)
+        .filter((c) => c.args.user === MALLORY);
+    // A mention in the channel itself: the link goes in the channel, under it, not in a thread Slack wouldn't show.
+    let since = fake.of("chat.postEphemeral").length;
+    const top = ts();
+    expect(await deliver(said(top))).toBe("forward");
+    let [link] = linkTold(since);
+    expect(link?.args).toMatchObject({ channel: "C0SALES", user: MALLORY });
+    expect(link?.args.thread_ts).toBeUndefined();
+    expect(JSON.stringify(link?.args.blocks)).toContain("https://opendash.example/slack/link#");
+    expect(await asked(top)).toBe(0);
+    expect((await record(`m:C0SALES:${top}`))?.status).toBe("handled");
+    // A mention in a thread with replies: the link stays in that thread.
+    since = fake.of("chat.postEphemeral").length;
+    const thread = ts();
+    const reply = ts();
+    expect(await deliver(said(reply, thread))).toBe("forward");
+    [link] = linkTold(since);
+    expect(link?.args).toMatchObject({ channel: "C0SALES", user: MALLORY, thread_ts: thread });
+    expect(JSON.stringify(link?.args.blocks)).toContain("https://opendash.example/slack/link#");
   }, 60_000);
 
   it("starts one conversation when two first questions arrive at once in a new Slack thread", async () => {
