@@ -16,6 +16,7 @@ import {
   type SectionAction,
   type WireResult,
 } from "@opendash/apps/protocol";
+import { csvCell } from "@opendash/core/csv";
 import { SidePanel } from "@opendash/ui";
 import { useTheme } from "next-themes";
 import { useCallback, useEffect, useRef, useState } from "react";
@@ -762,18 +763,6 @@ async function readRows(
 
 /** The most rows a CSV holds. */
 const CSV_ROWS = 5_000;
-
-/**
- * A cell as CSV: quoted when it must be, and never a formula (a spreadsheet would run a cell that starts with = + - @,
- * a tab, a line break, or one of their full-width forms): those start with an apostrophe.
- */
-export function csvCell(v: number | string | null | undefined): string {
-  if (v === null || v === undefined) return "";
-  let t = String(v);
-  // A formula's first character, a control a spreadsheet trims, or their full-width forms.
-  if (typeof v === "string" && /^[=+\-@\t\r\n\uFF1D\uFF0B\uFF0D\uFF20]/.test(t)) t = `'${t}`;
-  return /[",\n\r]/.test(t) ? `"${t.replace(/"/g, '""')}"` : t;
-}
 
 function RowsList({
   dashboardId,

@@ -11,6 +11,7 @@ import { VerifyDialog } from "@/components/verified/verify-dialog";
 import { apiQueries } from "@/lib/api";
 import type { MetricSpecLike } from "@/lib/metric-spec";
 import { shortDuration } from "@/lib/run-steps";
+import { CsvDownload } from "./csv-download";
 
 const time = new Intl.DateTimeFormat("en-US", { hour: "2-digit", minute: "2-digit", hourCycle: "h23" });
 
@@ -159,6 +160,11 @@ export function QueryCard({
         <span className="flex flex-wrap items-center gap-2 text-small text-muted-tertiary">
           <PathLabel path={metric ? "metric" : "unmodelled"} />
           {meta.join(" · ")}
+          {card.status === "succeeded" && card.columns.length ? (
+            <span className="ms-auto">
+              <CsvDownload queryRunIds={[card.id]} />
+            </span>
+          ) : null}
         </span>
         {card.definitions.length ? (
           <span className="text-small text-muted">

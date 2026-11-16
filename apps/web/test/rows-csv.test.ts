@@ -1,6 +1,7 @@
 // The rows sheet's CSV: quoted when a cell needs it, and never a formula a spreadsheet would run.
+
+import { csvCell } from "@opendash/core/csv";
 import { describe, expect, it } from "vitest";
-import { csvCell } from "@/components/dashboards/dashboard-host";
 
 describe("a rows CSV cell", () => {
   it("quotes what needs it and keeps numbers as they are", () => {

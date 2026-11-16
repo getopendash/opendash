@@ -2,7 +2,8 @@
 
 import { Button } from "@heroui/react";
 import type { RecordsAnswer } from "@opendash/core";
-import { RecordList, recordsCsv } from "@opendash/ui";
+import { csvText } from "@opendash/core/csv";
+import { RecordList } from "@opendash/ui";
 import { keepPreviousData, useQuery } from "@tanstack/react-query";
 import { ArrowLeft, CircleAlert, CircleCheck, Download, EyeOff } from "lucide-react";
 import { useEffect, useMemo, useRef, useState } from "react";
@@ -30,7 +31,11 @@ function Chip({ children, tone = "plain" }: { children: React.ReactNode; tone?: 
 }
 
 function download(view: Ready) {
-  const csv = recordsCsv(view.columns, view.rows);
+  // The page as CSV: a header of the columns' labels, then each row's raw values.
+  const csv = csvText(
+    view.columns.map((c) => ({ name: c.label, type: c.type })),
+    view.rows,
+  );
   const url = URL.createObjectURL(new Blob([csv], { type: "text/csv;charset=utf-8" }));
   const a = document.createElement("a");
   a.href = url;

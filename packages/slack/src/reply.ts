@@ -11,6 +11,7 @@ import {
   type ResolvedChart,
   type RunOutcome,
 } from "@opendash/core";
+import { queryCsv } from "@opendash/core/csv";
 import { visibleLinks } from "@opendash/markdown";
 import { spelledOut } from "./ask";
 import { LEARNING_SUGGEST } from "./learning";
@@ -430,27 +431,7 @@ export function replyBlocks(
   return blocks;
 }
 
-const formulaStart = /^[=+\-@\t\r]/;
-
-/** One CSV cell (RFC 4180), with a text cell that starts like a formula defused for spreadsheets. */
-export function csvCell(value: unknown): string {
-  if (value === null || value === undefined) return "";
-  const text = typeof value === "string" ? value : typeof value === "object" ? JSON.stringify(value) : String(value);
-  const safe = typeof value === "string" && formulaStart.test(text) && Number.isNaN(Number(text)) ? `'${text}` : text;
-  return /[",\r\n]/.test(safe) ? `"${safe.replaceAll('"', '""')}"` : safe;
-}
-
-/** A file name's stem: letters, digits and dashes, from a title. */
-export function fileStem(title: string): string {
-  const stem = title
-    .normalize("NFKD")
-    .replace(/[̀-ͯ]/g, "")
-    .toLowerCase()
-    .replace(/[^a-z0-9]+/g, "-")
-    .replace(/^-+|-+$/g, "")
-    .slice(0, 60);
-  return stem || "query";
-}
+export { csvCell, fileStem } from "@opendash/core/csv";
 
 /** Slack keeps an image's alt text to about a thousand characters. */
 const ALT_LIMIT = 1_000;
@@ -469,18 +450,13 @@ export function chartAltText(chart: Pick<ResolvedChart, "title" | "categories" |
 }
 
 /**
- * A cited query's rows as CSV: what its query card shows the asker (the stored result, at most 100 rows). The gateway
- * never returns personal-data columns, so none is here. A cut file says so in its name.
+ * A cited query's rows as CSV: what its query card shows the asker (the stored result, at most 100 rows), the same file
+ * the web chat downloads (`queryCsv`). The gateway never returns personal-data columns, so none is here.
  */
 export function cardCsv(card: Pick<QueryCard, "title" | "alias" | "columns" | "preview" | "rows" | "truncated">): {
   filename: string;
   data: Buffer;
 } {
-  const header = card.columns.map((c) => csvCell(c.name)).join(",");
-  const body = card.preview.map((row) => row.map(csvCell).join(","));
-  const total = card.rows ?? card.preview.length;
-  const cut = card.truncated || total > card.preview.length;
-  const stem = fileStem(card.title ?? card.alias ?? "query");
-  const filename = cut ? `${stem}-first-${card.preview.length}-of-${total}-rows.csv` : `${stem}.csv`;
-  return { filename, data: Buffer.from(`${[header, ...body].join("\r\n")}\r\n`, "utf8") };
+  const { filename, text } = queryCsv(card);
+  return { filename, data: Buffer.from(text, "utf8") };
 }

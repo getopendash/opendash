@@ -9,6 +9,7 @@
     ".": "./src/index.ts",
     "./audit": "./src/audit/actions.ts",
     "./clarify": "./src/runs/clarify.ts",
+    "./csv": "./src/csv.ts",
     "./enterprise": "./src/enterprise/index.ts",
     "./routines": "./src/routines/client.ts",
     "./telemetry": "./src/ops/telemetry.ts",

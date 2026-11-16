@@ -15,6 +15,7 @@ export {
 } from "./components/data-table";
 export { type DayId, DayPicker } from "./components/day-picker";
 export { Disclose } from "./components/disclose";
+export { type DownloadItem, DownloadMenu } from "./components/download-menu";
 export { EnterpriseRequired } from "./components/enterprise-required";
 export { FilterChip } from "./components/filter-chip";
 export { FitScale } from "./components/fit-scale";
@@ -46,7 +47,6 @@ export { BigQueryLogo, ClickHouseLogo, MySqlLogo, PostgresLogo, SnowflakeLogo } 
 export {
   formatRecordCell,
   type RecordColumnLike,
-  recordsCsv,
   recordsPages,
   recordsRange,
   recordTone,

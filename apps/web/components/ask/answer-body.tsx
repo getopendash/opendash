@@ -26,6 +26,7 @@ export function AnswerBody({
   onTrace,
   onAsk,
   chartAction,
+  tableAction,
   children,
 }: {
   answer: Answer;
@@ -35,8 +36,10 @@ export function AnswerBody({
   onTrace: (ref: TracedRef, key: string) => void;
   /** Asks again with a chip's reading changed. Absent when the reader can't add to the conversation. */
   onAsk?: (text: string) => void;
-  /** What a chart offers by its label (Add to dashboard), by its index. Absent in a report. */
+  /** What a chart offers by its label (Add to dashboard, its CSV), by its index. Absent in a report. */
   chartAction?: (index: number) => ReactNode;
+  /** What a table in the text offers by its header (its CSV), from the queries its cells cite. Absent in a report. */
+  tableAction?: (queryRunIds: string[]) => ReactNode;
   /** What the run made besides (dashboards, a remembered note): between the charts and the caveats. */
   children?: ReactNode;
 }) {
@@ -75,6 +78,7 @@ export function AnswerBody({
             selected={inspected}
             unverified={!answer.verified}
             onTrace={onTrace}
+            {...(tableAction ? { tableAction } : {})}
           />
         ) : (
           <p className="text-lead whitespace-pre-wrap">{answer.rendered}</p>

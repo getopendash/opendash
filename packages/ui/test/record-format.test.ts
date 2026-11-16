@@ -1,6 +1,6 @@
 // How a list of records writes its cells and its CSV.
 import { describe, expect, it } from "vitest";
-import { formatRecordCell, recordsCsv, recordsPages, recordsRange, recordTone } from "../src/record-format";
+import { formatRecordCell, recordsPages, recordsRange, recordTone } from "../src/record-format";
 
 const col = (name: string, type: "string" | "number" | "boolean" | "time", format?: "number" | "usd" | "percent") => ({
   name,
@@ -43,30 +43,6 @@ describe("recordTone", () => {
     expect(recordTone("priority", "normal")).toBeNull();
     expect(recordTone("channel", "failed")).toBeNull();
     expect(recordTone("status", 3)).toBeNull();
-  });
-});
-
-describe("recordsCsv", () => {
-  const columns = [col("id", "number"), col("subject", "string"), col("amount", "number")];
-  it("writes a header and the raw values, quoting what needs it", () => {
-    expect(recordsCsv(columns, [[1, 'He said "hi", twice', 12.5]])).toBe(
-      'id,subject,amount\r\n1,"He said ""hi"", twice",12.5\r\n',
-    );
-    expect(recordsCsv(columns, [[2, null, 0]])).toBe("id,subject,amount\r\n2,,0\r\n");
-  });
-  it("keeps a spreadsheet from running a cell as a formula", () => {
-    const out = recordsCsv(columns, [
-      [1, '=HYPERLINK("http://x")', 1],
-      [2, "+1 555", 2],
-      [3, "-5 off", 3],
-      [4, "@sum", 4],
-    ]);
-    expect(out).toContain("'=HYPERLINK");
-    expect(out).toContain("'+1 555");
-    expect(out).toContain("'-5 off");
-    expect(out).toContain("'@sum");
-    // Numbers are numbers: a negative amount isn't text.
-    expect(recordsCsv(columns, [[1, "x", -4.5]])).toContain(",-4.5");
   });
 });
 
