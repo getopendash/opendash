@@ -32,11 +32,14 @@ export function AnswerBlocks({
   blocks,
   leaf,
   draft = false,
+  tableAction,
   className = "text-lead",
 }: {
   blocks: Block[];
   leaf: Leaf;
   draft?: boolean;
+  /** Drawn at the end of a table's header row, from the references (placeholder indexes) in its cells. */
+  tableAction?: (refs: number[]) => ReactNode;
   className?: string;
 }) {
   const inline = (parts: Inline[], key: string): ReactNode[] =>
@@ -116,6 +119,11 @@ export function AnswerBlocks({
         const numeric = numericColumns({ align: b.align, head: b.head, rows: b.rows.map((r) => r.map(cellText)) });
         const align = (c: number) =>
           numeric[c] ? "text-right" : b.align[c] === "center" ? "text-center" : "text-left";
+        // A trailing cell in the header, so the table keeps its rows' height when its action arrives.
+        const refs = [...[b.head, ...b.rows].flat().map(cellText).join("").matchAll(PLACEHOLDER)].map((m) =>
+          Number(m[1]),
+        );
+        const action = tableAction && refs.length ? tableAction(refs) : null;
         return (
           <div key={key} className="overflow-x-auto">
             <table className="border-collapse text-body tabular-nums">
@@ -127,6 +135,7 @@ export function AnswerBlocks({
                       {inline(h, `${key}-h${c}`)}
                     </th>
                   ))}
+                  {action ? <th className="w-0 py-0.5 text-right align-middle">{action}</th> : null}
                 </tr>
               </thead>
               <tbody>
@@ -139,6 +148,7 @@ export function AnswerBlocks({
                         {inline(row[c] ?? [], `${key}-${r}-${c}`)}
                       </td>
                     ))}
+                    {action ? <td /> : null}
                   </tr>
                 ))}
               </tbody>
@@ -177,6 +187,7 @@ export function AnswerText({
   selected,
   unverified,
   onTrace,
+  tableAction,
   className = "text-lead",
 }: {
   segments: AnswerSegment[];
@@ -186,6 +197,8 @@ export function AnswerText({
   selected?: string | null;
   unverified?: boolean;
   onTrace?: (segment: Ref, key: string) => void;
+  /** Drawn by a table's header, from the queries its cells cite (its CSV). */
+  tableAction?: (queryRunIds: string[]) => ReactNode;
   className?: string;
 }) {
   // References become private-use placeholders, so the markdown is parsed once and they come back in place.
@@ -236,5 +249,15 @@ export function AnswerText({
     return out;
   };
 
-  return <AnswerBlocks blocks={parseMarkdown(source)} leaf={leaf} className={className} />;
+  const cited = (indexes: number[]) => [
+    ...new Set(indexes.flatMap((i) => (refs[i]?.citations ?? []).map((c) => c.queryRunId))),
+  ];
+  return (
+    <AnswerBlocks
+      blocks={parseMarkdown(source)}
+      leaf={leaf}
+      className={className}
+      {...(tableAction ? { tableAction: (indexes: number[]) => tableAction(cited(indexes)) } : {})}
+    />
+  );
 }

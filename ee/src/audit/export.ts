@@ -3,6 +3,8 @@
  * hash in the chain, and the export starts with the chain head (JSON Lines' first line; CSV's first row), so a copy of
  * it lives outside the database. Read a page per short transaction.
  */
+
+import { csvCell } from "@opendash/core/csv";
 import type { RunAudit } from "@opendash/core/enterprise";
 import { sql, uuidv7Floor } from "@opendash/db";
 import { type ChainRow, hex, ROW_COLUMNS, sortedJson } from "./chain";
@@ -29,12 +31,7 @@ export const CSV_COLUMNS = [
   "hash",
 ] as const;
 
-/** A CSV cell: quoted when it must be, and a leading = + - @ defused so a spreadsheet never runs it as a formula. */
-export function csvCell(value: unknown): string {
-  let text = value === null || value === undefined ? "" : String(value);
-  if (/^[=+\-@\t\r]/.test(text)) text = `'${text}`;
-  return /[",\n\r]/.test(text) ? `"${text.replace(/"/g, '""')}"` : text;
-}
+export { csvCell };
 
 function record(row: ChainRow) {
   return {

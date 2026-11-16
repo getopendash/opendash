@@ -26,6 +26,7 @@ import type { TracedRef } from "./answer-text";
 import { BuildCard } from "./build-card";
 import { ClarifyCard } from "./clarify-card";
 import { CorrectionNote } from "./correction-note";
+import { answerQueries, CsvDownload, chartQueries } from "./csv-download";
 import { McpCard } from "./mcp-card";
 import { PausedCard } from "./paused-card";
 import { RunStepsView } from "./run-steps-view";
@@ -518,6 +519,11 @@ export function RunBlock({
           question={question}
           inspected={inspected}
           onTrace={(ref, key) => inspect(ref, key)}
+          chartAction={(i) => {
+            const chart = answer.charts?.[i];
+            return chart ? <CsvDownload icon queryRunIds={chartQueries(chart)} /> : null;
+          }}
+          tableAction={(ids) => <CsvDownload icon queryRunIds={ids} />}
           {...(onAsk ? { onAsk } : {})}
         >
           {drafts.map((d) => (
@@ -569,6 +575,7 @@ export function RunBlock({
               PDF
             </a>
           ) : null}
+          {!couldNot && status === "succeeded" ? <CsvDownload queryRunIds={answerQueries(answer)} /> : null}
           {/* A routine from it: asked again on a schedule, or its verified metrics watched. */}
           {onAsk && !couldNot && status === "succeeded" ? <RepeatAnswer runId={run.id} /> : null}
           {onAsk && !couldNot && status === "succeeded" && answer.path === "metric" ? (

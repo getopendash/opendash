@@ -24,6 +24,7 @@ import {
   type DayId,
   DayPicker,
   Disclose,
+  DownloadMenu,
   dataColumns,
   EnterpriseRequired,
   LineDiff,
@@ -553,6 +554,25 @@ function Panel({ theme }: { theme: "light" | "dark" }) {
 
       <Section title="A run's steps: RunStepsView, with steps that didn't work (OpenDash)">
         <RunStepsSample />
+      </Section>
+
+      <Section title="Downloads: DownloadMenu, one file a link, several a menu (OpenDash)">
+        <div className="flex flex-wrap items-center gap-4">
+          <DownloadMenu items={[{ href: "#q1", label: "q1 · Active subscriptions by plan" }]} what="A query's rows" />
+          <DownloadMenu
+            items={[{ href: "#q1", label: "q1 · Active subscriptions by plan" }]}
+            what="A query's rows"
+            icon
+          />
+          <DownloadMenu
+            items={[
+              { href: "#q1", label: "q1 · Active subscriptions by plan" },
+              { href: "#q2", label: "q2 · Active subscriptions" },
+              { href: "#q3", label: "q3 · Monthly revenue by plan, a long title that wraps in a narrow menu" },
+            ]}
+            what="The queries' rows"
+          />
+        </div>
       </Section>
 
       <Section title="The records behind a number: RecordList (OpenDash)">

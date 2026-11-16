@@ -63,26 +63,6 @@ export function recordTone(column: string, value: unknown): "good" | "bad" | "wa
   return null;
 }
 
-/** A spreadsheet reads a cell that starts with one of these as a formula; the CSV keeps it text. */
-const FORMULA_START = /^[=+\-@\t\r]/;
-
-const csvCell = (value: unknown): string => {
-  if (value === null || value === undefined) return "";
-  let text =
-    value instanceof Date ? value.toISOString() : typeof value === "object" ? JSON.stringify(value) : String(value);
-  if (typeof value === "string" && FORMULA_START.test(text)) text = `'${text}`;
-  return /[",\n\r]/.test(text) ? `"${text.replaceAll('"', '""')}"` : text;
-};
-
-/** The page as CSV: a header of the columns' labels, then each row's raw values. */
-export function recordsCsv(columns: RecordColumnLike[], rows: unknown[][]): string {
-  const lines = [
-    columns.map((c) => csvCell(c.label)).join(","),
-    ...rows.map((r) => columns.map((_, i) => csvCell(r[i])).join(",")),
-  ];
-  return `${lines.join("\r\n")}\r\n`;
-}
-
 /** "Showing 26–50 of 1,402 tickets", or "of the first 1,000 of 4,210 tickets" past the cap. */
 export function recordsRange(input: {
   page: number;

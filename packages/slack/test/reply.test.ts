@@ -296,7 +296,8 @@ describe("a cited query's rows as CSV", () => {
   it("quotes what needs quoting and defuses what looks like a formula", () => {
     expect(csvCell('say "hi", ok')).toBe('"say ""hi"", ok"');
     expect(csvCell('=HYPERLINK("x")')).toBe('"\'=HYPERLINK(""x"")"');
-    expect(csvCell("-5")).toBe("-5");
+    // A text cell that starts like a formula is text, a number a number.
+    expect(csvCell("-5")).toBe("'-5");
     expect(csvCell(-5)).toBe("-5");
     expect(csvCell(null)).toBe("");
   });
@@ -311,14 +312,15 @@ describe("a cited query's rows as CSV", () => {
       ],
       preview: [
         ["2026-08-01", "396000.00"],
-        ["2026-09-01", "412600.00"],
+        ["2026-09-01", "-412600.00"],
       ],
       rows: 2,
       truncated: false,
     };
     const whole = cardCsv(card);
     expect(whole.filename).toBe("mrr-by-month.csv");
-    expect(whole.data.toString("utf8")).toBe("month,mrr\r\n2026-08-01,396000.00\r\n2026-09-01,412600.00\r\n");
+    // A warehouse's numeric arrives as text: in a number column it stays a number, a negative one too.
+    expect(whole.data.toString("utf8")).toBe("month,mrr\r\n2026-08-01,396000.00\r\n2026-09-01,-412600.00\r\n");
     expect(cardCsv({ ...card, rows: 1240, truncated: true }).filename).toBe("mrr-by-month-first-2-of-1240-rows.csv");
   });
 });
