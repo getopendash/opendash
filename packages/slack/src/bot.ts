@@ -236,19 +236,23 @@ export function createSlackBot(deps: SlackBotDeps, config: SlackBotConfig): { bo
     if (team) await slackInboundHandled(deps, team.orgId, teamId, key);
   }
 
+  /**
+   * Asks `message` as its author. `threadShown` is where a private word to them goes when the question is an earlier
+   * message read back (a source picked for it): the press's place, since the picker's card already started the thread.
+   */
   async function ask(
     thread: Thread<unknown>,
     message: Asked,
-    options: { connectionId?: string; inboundKey?: string | null } = {},
+    options: { connectionId?: string; inboundKey?: string | null; threadShown?: boolean } = {},
   ) {
     const teamId = teamOf(message.raw);
     const slackUserId = message.author.userId;
     if (!teamId) return;
+    const shown = options.threadShown ?? threadShownFor(message.raw);
+    const say = (said: Parameters<typeof tellPrivately>[2]) => tellPrivately(thread, slackUserId, said, shown);
     const asker = await slackAsker(deps, teamId, slackUserId);
     if (asker.kind === "unconnected") {
-      await tell(
-        thread,
-        message,
+      await say(
         "OpenDash isn't added to this Slack workspace yet. An owner or admin adds it in OpenDash, Settings → Slack.",
       );
       return;
@@ -273,14 +277,14 @@ export function createSlackBot(deps: SlackBotDeps, config: SlackBotConfig): { bo
           Actions([LinkButton({ label: "Link account", url: `${deps.webUrl}/slack/link#${token}`, style: "primary" })]),
         ],
       });
-      await tellPrivately(thread, message.author.userId, link, threadShownFor(message.raw));
+      await say(link);
       return;
     }
     // Its record, marked asked as it's asked: a message's own, or the press it stands for.
     const inboundKey = options.inboundKey === undefined ? inboundKeyOf(message.raw) : options.inboundKey;
     const files = await readFiles((message.attachments ?? []) as IncomingFile[]);
     // A note names the file, and a file can be named anything: it's said as plain text.
-    if (files.notes.length) await tell(thread, message, quiet(files.notes.join("\n")));
+    if (files.notes.length) await say(quiet(files.notes.join("\n")));
     const text = questionText(message.text);
     if (!text && !files.read.length) return;
     const result = await askFromSlack(
@@ -300,12 +304,12 @@ export function createSlackBot(deps: SlackBotDeps, config: SlackBotConfig): { bo
       },
     );
     if (result.kind === "refused") {
-      await tell(thread, message, result.message);
+      await say(result.message);
       return;
     }
     // The answer being worked on here reads it next, and its reply covers both.
     if (result.kind === "queued") {
-      await tell(thread, message, "Added to what I'm working on.");
+      await say("Added to what I'm working on.");
       return;
     }
     if (result.kind === "choose_source") {
@@ -351,7 +355,11 @@ export function createSlackBot(deps: SlackBotDeps, config: SlackBotConfig): { bo
       const original = found.messages.find((x) => x.id === m);
       // The question asked is the original message's; the record is the press's. The buttons then say which.
       if (original && original.author.userId === event.user.userId) {
-        await ask(event.thread, original, { connectionId: c, inboundKey: inboundKeyOf(event.raw) });
+        await ask(event.thread, original, {
+          connectionId: c,
+          inboundKey: inboundKeyOf(event.raw),
+          threadShown: threadShownFor(event.raw),
+        });
         const chosen = (event.raw as { actions?: { text?: { text?: unknown } }[] } | null)?.actions?.[0]?.text?.text;
         if (typeof chosen === "string" && chosen) {
           await event.adapter

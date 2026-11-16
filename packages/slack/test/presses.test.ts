@@ -248,6 +248,25 @@ describe("a source picked in Slack", () => {
     const [edited] = fake.calls.slice(since).filter((c) => c.method === "chat.update");
     expect(String(edited?.args.markdown_text ?? JSON.stringify(edited?.args))).toContain("Acme warehouse");
   });
+
+  it("tells its asker why it can't be asked, in the picker's thread", async () => {
+    const at = `17919${String(++n).padStart(5, "0")}.000100`;
+    fake.messages.push({ channel: "C0SALES", ts: at, thread_ts: at, user: PRIYA, team: TEAM.teamId, text: "Orders?" });
+    const since = fake.calls.length;
+    // A source that isn't ready (gone since the buttons were posted): refused, and told where the buttons are, though
+    // the question itself was said in the channel.
+    await deliver(
+      press(at, PRIYA, {
+        action_id: "opendash:source:0",
+        type: "button",
+        text: { type: "plain_text", text: "Old warehouse" },
+        value: JSON.stringify({ c: uuidv7(), m: at }),
+      }),
+    );
+    expect(told(PRIYA, since)).toEqual(["That source isn't ready to ask."]);
+    const [said] = fake.calls.slice(since).filter((c) => c.method === "chat.postEphemeral" && c.args.user === PRIYA);
+    expect(said?.args).toMatchObject({ channel: "C0SALES", thread_ts: at });
+  });
 });
 
 describe("Undo of what an answer remembered, in Slack", () => {
