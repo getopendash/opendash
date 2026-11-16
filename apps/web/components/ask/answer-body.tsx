@@ -44,27 +44,30 @@ export function AnswerBody({
   const couldNot = answer.status === "cannot_answer";
   return (
     <>
+      {/* The chips and the text are named for an answer landing where its draft was (`.answer-landing`). */}
       {segments?.interpretation.length ? (
-        <div className="flex flex-wrap gap-1.5">
-          {segments.interpretation.map((chip, i) => (
-            <span
-              // biome-ignore lint/suspicious/noArrayIndexKey: chips are positional and never reordered
-              key={i}
-              className="flex items-center gap-1 rounded-lg border border-border px-2 py-0.5 text-small text-muted"
-            >
-              <AnswerText
-                segments={chip}
-                scope={`chip-${i}`}
-                className="text-small"
-                selected={inspected}
-                onTrace={onTrace}
-              />
-              {onAsk ? <ReadingPopover reading={chipText(chip)} question={question} onAsk={onAsk} /> : null}
-            </span>
-          ))}
+        <div className="answer-body__chips">
+          <div className="flex flex-wrap gap-1.5">
+            {segments.interpretation.map((chip, i) => (
+              <span
+                // biome-ignore lint/suspicious/noArrayIndexKey: chips are positional and never reordered
+                key={i}
+                className="flex items-center gap-1 rounded-lg border border-border px-2 py-0.5 text-small text-muted"
+              >
+                <AnswerText
+                  segments={chip}
+                  scope={`chip-${i}`}
+                  className="text-small"
+                  selected={inspected}
+                  onTrace={onTrace}
+                />
+                {onAsk ? <ReadingPopover reading={chipText(chip)} question={question} onAsk={onAsk} /> : null}
+              </span>
+            ))}
+          </div>
         </div>
       ) : null}
-      <div>
+      <div className="answer-body__text">
         {segments ? (
           <AnswerText
             segments={segments.markdown}

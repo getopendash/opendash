@@ -418,24 +418,27 @@ describe("streaming", () => {
     ]);
   });
 
-  it("keeps the latest answer call's draft, drops a refused one, and an earlier attempt's", () => {
+  it("keeps the latest answer call's draft, holds a refused one until the answer lands, drops an earlier attempt's", () => {
     seq = 0;
     const first = [
       ev("attempt_started", { attempt: 1 }),
-      ev("delta", { answer: { callId: "a1", text: "MRR was 412" } }, 100),
+      ev("delta", { answer: { callId: "a1", text: "MRR was ⟦q1:0:mrr⟧." } }, 100),
     ];
-    expect(answerDraft(first)).toBe("MRR was 412");
+    expect(answerDraft(first)).toEqual({ text: "MRR was ⟦q1:0:mrr⟧.", held: false });
+    // Sent back by the gate: what the person was reading stays, still.
     const refused = [...first, ev("tool_result", { callId: "a1", tool: "answer", accepted: false }, 200)];
-    expect(answerDraft(refused)).toBeNull();
-    // A call that failed (its input didn't match its form) is gone too.
+    expect(answerDraft(refused)).toEqual({ text: "MRR was ⟦q1:0:mrr⟧.", held: true });
+    // A call that failed (its input didn't match its form) too.
     const failed = [...first, ev("tool_result", { callId: "a1", tool: "answer", status: "failed", failed: true }, 200)];
-    expect(answerDraft(failed)).toBeNull();
+    expect(answerDraft(failed)).toEqual({ text: "MRR was ⟦q1:0:mrr⟧.", held: true });
+    // Its repair isn't typed out over it, however far it gets, nor a second one sent back: the answer replaces it.
     const repaired = [
       ...refused,
-      ev("delta", { answer: { callId: "a2", text: "MRR was " } }, 300),
-      ev("delta", { answer: { callId: "a2", text: "⟦q1:0:mrr⟧." } }, 400),
+      ev("delta", { answer: { callId: "a2", text: "MRR was ⟦q2:0:mrr⟧ in total, up from last month." } }, 300),
+      ev("tool_result", { callId: "a2", tool: "answer", accepted: false }, 350),
+      ev("delta", { answer: { callId: "a3", text: "ARR" } }, 400),
     ];
-    expect(answerDraft(repaired)).toBe("MRR was ⟦q1:0:mrr⟧.");
+    expect(answerDraft(repaired)).toEqual({ text: "MRR was ⟦q1:0:mrr⟧.", held: true });
     // A new attempt took over: what the old one streamed is gone.
     const taken = [...repaired, ev("attempt_started", { attempt: 2, discardAfterSeq: 99 }, 500, 2)];
     expect(answerDraft(taken)).toBeNull();

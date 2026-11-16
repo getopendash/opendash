@@ -506,6 +506,51 @@
   }
 
   /*
+   * Something appearing above or beside what's being read (an answer's path label as it lands): it grows open from
+   * nothing, so what's below it slides rather than jumps. Its one child clips while it grows; a focus ring still shows.
+   */
+  .enter-grow {
+    display: grid;
+    grid-template-rows: 1fr;
+    animation: vg-grow var(--motion-base) var(--motion-ease) both;
+  }
+
+  .enter-grow > * {
+    min-height: 0;
+    overflow: clip;
+    overflow-clip-margin: var(--spacing);
+  }
+
+  /*
+   * An answer landing where its draft was (Ask): its text stays where the person is reading, and only its numbers fade
+   * in where the pills were. What the draft didn't have rises in below it; its chips, above it, grow open from nothing
+   * with the column's gap under them (gap-3), so the text slides down rather than jumps.
+   */
+  .answer-landing > * {
+    animation: vg-rise var(--motion-base) var(--motion-ease) both;
+  }
+
+  .answer-landing > .answer-body__text {
+    animation: none;
+  }
+
+  .answer-landing > .answer-body__text .traced-number {
+    animation: vg-fade var(--motion-base) var(--motion-ease) both;
+  }
+
+  .answer-landing > .answer-body__chips {
+    display: grid;
+    grid-template-rows: 1fr;
+    animation: vg-grow-above var(--motion-base) var(--motion-ease) both;
+  }
+
+  .answer-landing > .answer-body__chips > * {
+    min-height: 0;
+    overflow: clip;
+    overflow-clip-margin: var(--spacing);
+  }
+
+  /*
    * An App the agent is working on: a soft accent light travels round its edge, with a faint
    * glow inside, until the build ends. Above the App, never in the way of a press.
    */
@@ -789,6 +834,22 @@
   from {
     opacity: 0;
     transform: translateY(var(--motion-rise));
+  }
+}
+
+@keyframes vg-grow {
+  from {
+    grid-template-rows: 0fr;
+    opacity: 0;
+  }
+}
+
+/* As vg-grow, with the column's gap under it (gap-3) opening too. */
+@keyframes vg-grow-above {
+  from {
+    grid-template-rows: 0fr;
+    opacity: 0;
+    margin-block-end: calc(var(--spacing) * -3);
   }
 }
 

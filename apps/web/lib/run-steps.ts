@@ -205,14 +205,23 @@ export function standingEvents(events: RunEventLike[]): RunEventLike[] {
   );
 }
 
+/** The answer as it's being written (`answerDraft`). */
+export interface AnswerDraftText {
+  text: string;
+  /** A draft the gate sent back, held still until the checked answer lands. */
+  held: boolean;
+}
+
 /**
- * The answer as it's being written: the text of the latest answer call's streamed input, or null. A draft
- * the gate sent back is gone; its repair streams in its place. Never shown as the answer: `draftSegments` turns
- * every number in it into a pill until the checked answer replaces it.
+ * The answer as it's being written: the text of the latest answer call's streamed input, or null. A draft the gate
+ * sent back (or a call that failed) stays, held still, until the checked answer takes its place: its repair isn't
+ * typed out again from nothing over what the person was reading. Never shown as the answer: `draftBlocks` and
+ * `draftPieces` turn every number in it into a pill.
  */
-export function answerDraft(all: RunEventLike[]): string | null {
+export function answerDraft(all: RunEventLike[]): AnswerDraftText | null {
   const drafts = new Map<string, string>();
   let current: string | null = null;
+  let held: string | null = null;
   for (const e of standingEvents(all)) {
     if (e.type === "delta") {
       const a = e.data.answer as { callId?: unknown; text?: unknown } | undefined;
@@ -220,11 +229,14 @@ export function answerDraft(all: RunEventLike[]): string | null {
       drafts.set(a.callId, (drafts.get(a.callId) ?? "") + a.text);
       current = a.callId;
     } else if (e.type === "tool_result" && e.data.tool === "answer" && e.data.accepted !== true) {
-      // Sent back by the gate, or a call that failed: its draft is gone.
+      // The first draft sent back is the one on screen: it stays until the answer lands.
+      if (held === null && current !== null && s(e.data.callId) === current) held = drafts.get(current) || null;
       if (s(e.data.callId) === current) current = null;
     }
   }
-  return current ? (drafts.get(current) ?? null) : null;
+  if (held !== null) return { text: held, held: true };
+  const text = current ? (drafts.get(current) ?? null) : null;
+  return text ? { text, held: false } : null;
 }
 
 export function runSteps(all: RunEventLike[], context: { source: string }): RunStep[] {

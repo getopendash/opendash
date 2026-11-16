@@ -19,83 +19,32 @@ type Ref = TracedRef;
 
 const PLACEHOLDER = new RegExp(`${REF_OPEN}(\\d+)${REF_CLOSE}`, "g");
 
+/** How a text part is drawn: its references (and, in a draft, its numbers) in place, its own line breaks kept. */
+export type Leaf = (value: string, key: string) => ReactNode[];
+
 /**
- * An answer's text from its segments (the gate's pieces): the model's markdown, read the CommonMark way
- * (@opendash/markdown, as a PDF reads it), with each reference rendered as a traced number from its cells. Nothing in
- * the text itself is ever shown as a number to trace: only references are; nothing in it is ever HTML, and no link in it
- * is ever followed.
+ * Markdown as an answer draws it, the CommonMark way (@opendash/markdown, as a PDF reads it): the checked answer and
+ * its draft alike, so the answer lands where its draft was and only its numbers change. Every text goes through `leaf`.
+ * Nothing in it is ever HTML, and no link in it is ever followed. A `draft` draws code through `leaf` too, a link
+ * without its address and a numbered list from one: nothing in a draft shows a number before the gate checked it.
  */
-export function AnswerText({
-  segments,
-  scope,
-  selected,
-  unverified,
-  onTrace,
+export function AnswerBlocks({
+  blocks,
+  leaf,
+  draft = false,
   className = "text-lead",
 }: {
-  segments: AnswerSegment[];
-  /** Names this text among the run's texts (answer, caveat-0…), so a traced number's key is unique. */
-  scope: string;
-  /** The key (scope:index) of the number being traced. */
-  selected?: string | null;
-  unverified?: boolean;
-  onTrace?: (segment: Ref, key: string) => void;
+  blocks: Block[];
+  leaf: Leaf;
+  draft?: boolean;
   className?: string;
 }) {
-  // References become private-use placeholders, so the markdown is parsed once and they come back in place.
-  const refs: Ref[] = [];
-  const source = segments
-    .map((s) => {
-      if ("text" in s) return s.text;
-      refs.push(s);
-      return `${REF_OPEN}${refs.length - 1}${REF_CLOSE}`;
-    })
-    .join("");
-
-  /** A text part: its references as traced numbers, its own line breaks kept. */
-  const text = (value: string, key: string): ReactNode[] => {
-    const out: ReactNode[] = [];
-    let at = 0;
-    let i = 0;
-    const plain = (t: string) =>
-      t.split("\n").forEach((line, n) => {
-        if (n > 0) out.push(<br key={`${key}-br${i++}`} />);
-        if (line) out.push(line);
-      });
-    for (const m of value.matchAll(PLACEHOLDER)) {
-      plain(value.slice(at, m.index));
-      const index = Number(m[1]);
-      const ref = refs[index];
-      const k = `${key}-${i++}`;
-      if (ref) {
-        out.push(
-          ref.kind === "unresolved" ? (
-            <span key={k} className="text-muted-tertiary">
-              [?]
-            </span>
-          ) : (
-            <TracedNumber
-              key={k}
-              display={ref.display}
-              selected={selected === `${scope}:${index}`}
-              unverified={unverified}
-              {...(onTrace ? { onPress: () => onTrace(ref, `${scope}:${index}`) } : {})}
-            />
-          ),
-        );
-      }
-      at = m.index + m[0].length;
-    }
-    plain(value.slice(at));
-    return out;
-  };
-
   const inline = (parts: Inline[], key: string): ReactNode[] =>
     parts.map((p, i) => {
       const k = `${key}-${i}`;
       switch (p.kind) {
         case "text":
-          return <Fragment key={k}>{text(p.text, k)}</Fragment>;
+          return <Fragment key={k}>{leaf(p.text, k)}</Fragment>;
         case "bold":
           return <strong key={k}>{inline(p.children, k)}</strong>;
         case "italic":
@@ -105,7 +54,7 @@ export function AnswerText({
         case "code":
           return (
             <code key={k} className="rounded-sm bg-surface-secondary px-1 font-mono text-body">
-              {p.text}
+              {draft ? leaf(p.text, k) : p.text}
             </code>
           );
         case "break":
@@ -113,9 +62,9 @@ export function AnswerText({
         default: {
           // A link is never followed from here: an answer is the model's writing, steered by the data it read, and
           // a link could carry what it read to someone else's site. Its text, with the address beside it when the
-          // text doesn't already say it, for the reader to see and copy.
+          // text doesn't already say it, for the reader to see and copy (a draft's waits for the checked answer).
           const label = plainText(p.children);
-          const shown = p.href ?? null;
+          const shown = draft ? null : (p.href ?? null);
           return (
             <Fragment key={k}>
               {inline(p.children, k)}
@@ -158,7 +107,7 @@ export function AnswerText({
             {items}
           </ul>
         ) : (
-          <ol key={key} start={b.start} className="flex list-decimal flex-col gap-1 ps-5">
+          <ol key={key} {...(draft ? {} : { start: b.start })} className="flex list-decimal flex-col gap-1 ps-5">
             {items}
           </ol>
         );
@@ -200,7 +149,7 @@ export function AnswerText({
       case "code":
         return (
           <pre key={key} className="overflow-x-auto rounded-lg bg-surface-secondary px-3 py-2 font-mono text-body">
-            {b.text}
+            {draft ? leaf(b.text, key) : b.text}
           </pre>
         );
       case "quote":
@@ -214,7 +163,78 @@ export function AnswerText({
     }
   };
 
-  return (
-    <div className={`flex flex-col gap-2.5 ${className}`}>{parseMarkdown(source).map((b, i) => block(b, `b${i}`))}</div>
-  );
+  return <div className={`flex flex-col gap-2.5 ${className}`}>{blocks.map((b, i) => block(b, `b${i}`))}</div>;
+}
+
+/**
+ * An answer's text from its segments (the gate's pieces): the model's markdown (`AnswerBlocks`), with each reference
+ * rendered as a traced number from its cells. Nothing in the text itself is ever shown as a number to trace: only
+ * references are.
+ */
+export function AnswerText({
+  segments,
+  scope,
+  selected,
+  unverified,
+  onTrace,
+  className = "text-lead",
+}: {
+  segments: AnswerSegment[];
+  /** Names this text among the run's texts (answer, caveat-0…), so a traced number's key is unique. */
+  scope: string;
+  /** The key (scope:index) of the number being traced. */
+  selected?: string | null;
+  unverified?: boolean;
+  onTrace?: (segment: Ref, key: string) => void;
+  className?: string;
+}) {
+  // References become private-use placeholders, so the markdown is parsed once and they come back in place.
+  const refs: Ref[] = [];
+  const source = segments
+    .map((s) => {
+      if ("text" in s) return s.text;
+      refs.push(s);
+      return `${REF_OPEN}${refs.length - 1}${REF_CLOSE}`;
+    })
+    .join("");
+
+  /** A text part: its references as traced numbers, its own line breaks kept. */
+  const leaf: Leaf = (value, key) => {
+    const out: ReactNode[] = [];
+    let at = 0;
+    let i = 0;
+    const plain = (t: string) =>
+      t.split("\n").forEach((line, n) => {
+        if (n > 0) out.push(<br key={`${key}-br${i++}`} />);
+        if (line) out.push(line);
+      });
+    for (const m of value.matchAll(PLACEHOLDER)) {
+      plain(value.slice(at, m.index));
+      const index = Number(m[1]);
+      const ref = refs[index];
+      const k = `${key}-${i++}`;
+      if (ref) {
+        out.push(
+          ref.kind === "unresolved" ? (
+            <span key={k} className="text-muted-tertiary">
+              [?]
+            </span>
+          ) : (
+            <TracedNumber
+              key={k}
+              display={ref.display}
+              selected={selected === `${scope}:${index}`}
+              unverified={unverified}
+              {...(onTrace ? { onPress: () => onTrace(ref, `${scope}:${index}`) } : {})}
+            />
+          ),
+        );
+      }
+      at = m.index + m[0].length;
+    }
+    plain(value.slice(at));
+    return out;
+  };
+
+  return <AnswerBlocks blocks={parseMarkdown(source)} leaf={leaf} className={className} />;
 }
