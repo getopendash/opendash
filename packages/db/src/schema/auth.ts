@@ -304,6 +304,8 @@ export const ssoProvider = authSchema.table(
     name: text("name").default("").notNull(),
     status: text("status").default("draft").notNull(),
     enforceSso: boolean("enforce_sso").default(false).notNull(),
+    /** The role someone new to the workspace gets when they first sign in through it (an invitation's role wins). */
+    joinRole: text("join_role").default("viewer").notNull(),
     lastTestedAt: timestamp("last_tested_at", { withTimezone: true }),
     createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
     updatedAt: timestamp("updated_at", { withTimezone: true }).defaultNow().notNull(),
@@ -322,6 +324,8 @@ export const ssoProvider = authSchema.table(
     // One enforcing provider per domain: enforcement compares a session's provider with "the" enforcing one.
     uniqueIndex("sso_provider_one_enforcer_per_domain_uq").on(table.domain).where(sql`enforce_sso`),
     check("sso_provider_status_ck", sql`${table.status} in ('draft', 'verified', 'active', 'disabled')`),
+    // Never admin or owner by default: that would make everyone at the domain one.
+    check("sso_provider_join_role_ck", sql`${table.joinRole} in ('viewer', 'member')`),
     // Enforcement needs a proved domain and a passed test sign-in, so an untested provider is never the only way in.
     check(
       "sso_provider_enforce_requires_active_ck",

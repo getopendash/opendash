@@ -10,8 +10,8 @@
  *     session through a function call, not an endpoint, so this is on every path, not only /get-session;
  *  5. after /get-session: the same verdict, for the one path (4) skips; the app's pages and API ask through it;
  *  6. after anything else that made a session (an email link, a two-factor code): at an enforced domain it's deleted;
- *  7. after a provider's callback: someone new to the provider's workspace joins it, as a viewer or with the role
- *     an invitation gave them.
+ *  7. after a provider's callback: someone new to the provider's workspace joins it, with the role an invitation gave
+ *     them, or else the provider's join role (viewer unless an admin chose member).
  * Inside the callback's own transaction, `resolveUser` checks the provider again (after the plugin locked its row, so
  * Disable can't race a sign-in) and that the email is at exactly its domain.
  */
@@ -66,6 +66,7 @@ const PROVIDER_FIELDS = {
   name: { type: "string", required: false, input: false, defaultValue: "" },
   status: { type: "string", required: false, input: false, defaultValue: "draft" },
   enforceSso: { type: "boolean", required: false, input: false, defaultValue: false },
+  joinRole: { type: "string", required: false, input: false, defaultValue: "viewer" },
   lastTestedAt: { type: "date", required: false, input: false },
   createdAt: { type: "date", required: false, input: false, defaultValue: () => new Date() },
   updatedAt: { type: "date", required: false, input: false, defaultValue: () => new Date() },
@@ -153,7 +154,7 @@ export function ssoAuthExtension(deps: SsoAuthDeps): (core: { audit: AuthAudit }
       }
     }
 
-    /** Someone new to the provider's workspace joins it (as a viewer, or with their invitation's role). */
+    /** Someone new to the provider's workspace joins it (with their invitation's role, or the provider's join role). */
     async function join(ctx: Ctx, provider: ProviderPolicy, user: { id: string; email: string; name?: string | null }) {
       const orgId = provider.organizationId;
       const [already] = await db
@@ -173,7 +174,17 @@ export function ssoAuthExtension(deps: SsoAuthDeps): (core: { audit: AuthAudit }
           ),
         )
         .limit(1);
-      const role = invited?.role === "admin" || invited?.role === "member" ? invited.role : "viewer";
+      // An invitation's role wins; otherwise the provider's join role (viewer or member, never more: a CHECK says so).
+      let role: "admin" | "member" | "viewer" = "viewer";
+      if (invited) {
+        if (invited.role === "admin" || invited.role === "member") role = invited.role;
+      } else {
+        const [row] = await db
+          .select({ joinRole: t.ssoProvider.joinRole })
+          .from(t.ssoProvider)
+          .where(eq(t.ssoProvider.providerId, provider.providerId));
+        if (row?.joinRole === "member") role = "member";
+      }
       const memberId = uuidv7();
       await db.transaction(async (tx) => {
         await tx

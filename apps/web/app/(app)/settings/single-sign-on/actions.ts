@@ -1,6 +1,6 @@
 "use server";
 
-import type { SsoNewProvider, SsoProviderChange, SsoResult } from "@opendash/core/enterprise";
+import type { SsoJoinRole, SsoNewProvider, SsoProviderChange, SsoResult } from "@opendash/core/enterprise";
 import { revalidatePath } from "next/cache";
 import { ssoCaller } from "@/lib/sso";
 
@@ -34,6 +34,8 @@ export const disableProvider = async (providerId: string) => step(({ sso, caller
 export const enableProvider = async (providerId: string) => step(({ sso, caller }) => sso.enable(caller, providerId));
 export const changeProvider = async (providerId: string, change: SsoProviderChange) =>
   step(({ sso, caller }) => sso.update(caller, providerId, change));
+export const setJoinRole = async (providerId: string, role: SsoJoinRole) =>
+  step(({ sso, caller }) => sso.setJoinRole(caller, providerId, role));
 export const replaceSecret = async (providerId: string, clientSecret: string) =>
   step(({ sso, caller }) => sso.rotateSecret(caller, providerId, clientSecret));
 export const removeProvider = async (providerId: string) => step(({ sso, caller }) => sso.remove(caller, providerId));

@@ -168,7 +168,8 @@ export interface AuditDetail {
   "mcp_connection.connected": { scope: "org" | "personal"; again: boolean; kind?: "apikey" };
   "mcp_connection.disconnected": { scope: "org" | "personal" };
   "sso.provider_added": { protocol: "oidc" | "saml"; domain: string };
-  "sso.provider_updated": { protocol: "oidc" | "saml"; domain: string };
+  /** `joinRole`: the role people new to the workspace now join with, when that's what changed. */
+  "sso.provider_updated": { protocol: "oidc" | "saml"; domain: string; joinRole?: "viewer" | "member" };
   "sso.secret_rotated": { protocol: "oidc" | "saml" };
   "sso.domain_verified": { domain: string };
   "sso.activated": { domain: string };
@@ -234,7 +235,10 @@ export function auditLine(action: string, detail: Record<string, unknown>): { la
       };
     case "sso.provider_added":
     case "sso.provider_updated":
-      return { label, note: `${d.protocol === "saml" ? "SAML" : "OIDC"} · ${d.domain}` };
+      return {
+        label,
+        note: `${d.protocol === "saml" ? "SAML" : "OIDC"} · ${d.domain}${d.joinRole ? ` · new people join as ${role(d.joinRole)}` : ""}`,
+      };
     case "scim.mapping_updated":
       return { label, note: d.role === "none" ? "no role" : `gives ${role(d.role)}` };
     case "scim.disconnected":

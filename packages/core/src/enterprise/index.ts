@@ -98,6 +98,9 @@ export interface EnterpriseScim {
 
 export type SsoStatus = "draft" | "verified" | "active" | "disabled";
 export type SsoProtocol = "oidc" | "saml";
+/** The role someone new to the workspace gets at their first sign-in through a provider: never admin or owner. */
+export type SsoJoinRole = "viewer" | "member";
+export const SSO_JOIN_ROLES: readonly SsoJoinRole[] = ["viewer", "member"];
 
 /** What the settings page may see of a provider: never its secrets. */
 export interface SsoProviderView {
@@ -110,6 +113,8 @@ export interface SsoProviderView {
   domainVerified: boolean;
   status: SsoStatus;
   enforced: boolean;
+  /** The role people new to the workspace join with (a pending invitation's role wins). */
+  joinRole: SsoJoinRole;
   lastTestedAt: string | null;
   updatedAt: string;
   /** Live sessions it signed in. */
@@ -195,6 +200,11 @@ export interface EnterpriseSso {
   disable(caller: SsoCaller, providerId: string): Promise<SsoResult<SsoProviderView & { sessionsEnded: number }>>;
   enable(caller: SsoCaller, providerId: string): Promise<SsoResult<SsoProviderView>>;
   update(caller: SsoCaller, providerId: string, change: SsoProviderChange): Promise<SsoResult<SsoProviderView>>;
+  /**
+   * The role people new to the workspace get at their first sign-in through it. Changes nobody already in it, and can
+   * change while it's required (it isn't an identity setting).
+   */
+  setJoinRole(caller: SsoCaller, providerId: string, role: SsoJoinRole): Promise<SsoResult<SsoProviderView>>;
   /** Replaces the client secret (OIDC). Write-only: never shown again. */
   rotateSecret(caller: SsoCaller, providerId: string, clientSecret: string): Promise<SsoResult<null>>;
   remove(caller: SsoCaller, providerId: string): Promise<SsoResult<{ sessionsEnded: number }>>;
