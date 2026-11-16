@@ -1,0 +1,2 @@
+ALTER TABLE "auth"."sso_provider" ADD COLUMN "join_role" text DEFAULT 'viewer' NOT NULL;--> statement-breakpoint
+ALTER TABLE "auth"."sso_provider" ADD CONSTRAINT "sso_provider_join_role_ck" CHECK ("auth"."sso_provider"."join_role" in ('viewer', 'member'));

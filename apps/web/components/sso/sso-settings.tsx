@@ -1,7 +1,21 @@
 "use client";
 
-import { Alert, Button, Chip, Dropdown, Input, Label, Modal, Switch, TextArea, TextField, toast } from "@heroui/react";
-import type { SsoProviderView } from "@opendash/core/enterprise";
+import {
+  Alert,
+  Button,
+  Chip,
+  Dropdown,
+  Input,
+  Label,
+  ListBox,
+  Modal,
+  Select,
+  Switch,
+  TextArea,
+  TextField,
+  toast,
+} from "@heroui/react";
+import type { SsoJoinRole, SsoProviderView } from "@opendash/core/enterprise";
 import { EllipsisVertical, Plus } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { useState, useTransition } from "react";
@@ -13,6 +27,7 @@ import {
   removeProvider,
   replaceSecret,
   requireProvider,
+  setJoinRole,
   stopRequiring,
 } from "@/app/(app)/settings/single-sign-on/actions";
 import { ago, count } from "@/lib/format";
@@ -28,6 +43,12 @@ const STATUS: Record<
   active: { label: "Active", color: "success" },
   disabled: { label: "Disabled", color: "danger" },
 };
+
+/** What someone new to the workspace joins as at their first sign-in: never admin (that's by hand or a group). */
+const JOIN_ROLES: { id: SsoJoinRole; label: string }[] = [
+  { id: "viewer", label: "Viewer" },
+  { id: "member", label: "Member" },
+];
 
 /** Why a test sign-in came back without signing in, as the plugin and our hooks say it. */
 const TEST_ERRORS: Record<string, string> = {
@@ -170,6 +191,36 @@ export function SsoSettings({
                       {p.protocol === "saml" ? "SAML 2.0" : "OIDC"} · <span className="font-mono">{p.providerId}</span>
                     </span>
                     <span className="block whitespace-nowrap text-muted-tertiary @2xl/page:hidden">{p.domain}</span>
+                    {/* In the provider's own cell, not a column: it takes no width, so the row's actions still fit. */}
+                    <Select
+                      className="mt-2 w-fit"
+                      selectedKey={p.joinRole}
+                      isDisabled={!licensed || pending}
+                      onSelectionChange={(key) => {
+                        const role = String(key) as SsoJoinRole;
+                        if (role === p.joinRole) return;
+                        run(
+                          () => setJoinRole(p.providerId, role),
+                          `People new to the workspace who sign in through ${p.name} join as ${role === "member" ? "members" : "viewers"}.`,
+                        );
+                      }}
+                    >
+                      <Label className="whitespace-nowrap text-small text-muted">New people join as</Label>
+                      <Select.Trigger className="w-28">
+                        <Select.Value />
+                        <Select.Indicator />
+                      </Select.Trigger>
+                      <Select.Popover>
+                        <ListBox>
+                          {JOIN_ROLES.map((o) => (
+                            <ListBox.Item key={o.id} id={o.id} textValue={o.label}>
+                              <Label>{o.label}</Label>
+                              <ListBox.ItemIndicator />
+                            </ListBox.Item>
+                          ))}
+                        </ListBox>
+                      </Select.Popover>
+                    </Select>
                   </td>
                   <td className="hidden px-4 py-2.5 @2xl/page:table-cell">
                     <span className="block text-body">{p.domain}</span>
@@ -295,6 +346,10 @@ export function SsoSettings({
               ))}
             </tbody>
           </table>
+          <p className="border-t border-border px-4 py-2 text-small text-muted">
+            New people join with this role the first time they sign in. An invitation's role wins, and nobody already in
+            the workspace changes. Make admins by hand, or map a group in Directory sync.
+          </p>
         </div>
       ) : (
         <section className="flex flex-col gap-1 rounded-2xl border border-dashed border-border px-5 py-6 text-center">

@@ -299,6 +299,46 @@ describe("single sign-on", () => {
     expect(await roleOf(ines)).toBe("member");
   });
 
+  it("joins people new to the workspace with the provider's join role, never admin; an invitation's role wins", async () => {
+    const c = await caller(maya);
+    expect(await sso.setJoinRole(c, "acme-okta", "admin" as never)).toMatchObject({ ok: false, code: "INVALID" });
+    licensed = false;
+    expect(await sso.setJoinRole(c, "acme-okta", "member")).toMatchObject({ ok: false, code: "LICENSE_REQUIRED" });
+    licensed = true;
+    expect(await sso.setJoinRole(c, "acme-okta", "member")).toMatchObject({ ok: true, value: { joinRole: "member" } });
+    const rows = await actions();
+    expect(
+      rows.some((r) => r.action === "sso.provider_updated" && r.detail.joinRole === "member" && r.detail.domain),
+    ).toBe(true);
+    // The database refuses admin whatever writes it.
+    await expect(
+      t.owner`update auth.sso_provider set join_role = 'admin' where provider_id = 'acme-okta'`,
+    ).rejects.toThrow();
+
+    const omar = await throughIdp({ sub: "omar", email: "omar@acme.test", name: "Omar" }, { email: "omar@acme.test" });
+    expect(omar.callback?.location).not.toMatch(/error/);
+    expect(await roleOf((await userOf("omar@acme.test"))?.id as string)).toBe("member");
+    expect((await actions()).some((r) => r.action === "member.joined" && r.detail.role === "member")).toBe(true);
+
+    // Someone already in the workspace keeps their role.
+    await throughIdp({ sub: "priya", email: "priya@acme.test", name: "Priya Shah" }, { email: "priya@acme.test" });
+    expect(await roleOf((await userOf("priya@acme.test"))?.id as string)).toBe("viewer");
+
+    // Invited as a viewer: joins as one, and the invitation is accepted.
+    const [owner] = await t.owner<{ id: string }[]>`select id from auth."user" where email = 'maya@acme.test'`;
+    const invite = uuidv7();
+    await t.auth.client`
+      insert into auth.invitation (id, organization_id, email, role, status, expires_at, inviter_id)
+      values (${invite}, ${orgId}, 'lena@acme.test', 'viewer', 'pending', now() + interval '1 day', ${owner?.id as string})`;
+    const lena = await throughIdp({ sub: "lena", email: "lena@acme.test", name: "Lena" }, { email: "lena@acme.test" });
+    expect(lena.callback?.location).not.toMatch(/error/);
+    expect(await roleOf((await userOf("lena@acme.test"))?.id as string)).toBe("viewer");
+    const [accepted] = await t.owner<{ status: string }[]>`select status from auth.invitation where id = ${invite}`;
+    expect(accepted?.status).toBe("accepted");
+
+    expect(await sso.setJoinRole(c, "acme-okta", "viewer")).toMatchObject({ ok: true, value: { joinRole: "viewer" } });
+  });
+
   it("binds the invite-only exception to the callback, not the domain: no email link for someone new", async () => {
     const before = mailer.sent.length;
     await auth.api.signInMagicLink({ body: { email: "carol@acme.test", callbackURL: "/" }, headers: new Headers() });

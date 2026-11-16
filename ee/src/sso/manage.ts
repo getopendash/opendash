@@ -3,7 +3,7 @@
  * test sign-in) → enforced, and Disable as the way back in. The settings page calls these, never the plugin's own
  * routes (404 over HTTP): those know nothing of the lifecycle, the audit log or the license.
  *  - Owners and admins manage; anyone whose current session came through a provider since its last change may mark it
- *    active (whoever comes back from the identity provider may be someone it just added, as a viewer).
+ *    active (whoever comes back from the identity provider may be someone it just added, with its join role).
  *  - Changes need a license in production, except Disable: it's the way back in, and it only takes access away.
  *  - The plugin is called in process with the caller's cookie, for what it owns (the stored settings, the domain
  *    token); OpenDash's columns are written here, as opendash_auth.
@@ -13,7 +13,14 @@
  */
 
 import { audit, auditSystem, BUDGETS, type OrgSealer } from "@opendash/core";
-import type { Enterprise, EnterpriseSso, SsoCaller, SsoProviderView, SsoResult } from "@opendash/core/enterprise";
+import {
+  type Enterprise,
+  type EnterpriseSso,
+  SSO_JOIN_ROLES,
+  type SsoCaller,
+  type SsoProviderView,
+  type SsoResult,
+} from "@opendash/core/enterprise";
 import type { SystemTx, TenantTx } from "@opendash/db";
 import type { AuthDatabase } from "@opendash/db/auth";
 import { authTables as t } from "@opendash/db/auth";
@@ -231,6 +238,7 @@ export function ssoManager(deps: SsoManageDeps): EnterpriseSso {
       domainVerified: row.domainVerified,
       status: row.status as SsoStatus,
       enforced: row.enforceSso,
+      joinRole: row.joinRole === "member" ? "member" : "viewer",
       lastTestedAt: row.lastTestedAt?.toISOString() ?? null,
       updatedAt: row.updatedAt.toISOString(),
       sessions: counts?.sessions ?? 0,
@@ -832,6 +840,29 @@ export function ssoManager(deps: SsoManageDeps): EnterpriseSso {
         target: { type: "sso_provider", name: next.name },
         fields,
         detail: { protocol, domain: next.domain },
+      });
+      return ok(await view(next, true));
+    },
+
+    async setJoinRole(caller, providerId, role) {
+      const checked = await changing(caller, providerId);
+      if (!checked.ok) return checked;
+      const { row } = checked;
+      if (!SSO_JOIN_ROLES.includes(role)) {
+        return fail("INVALID", "New people join as a viewer or a member. Make admins by hand or with a mapped group.");
+      }
+      if (row.joinRole === role) return ok(await view(row, true));
+      const [next] = await db
+        .update(t.ssoProvider)
+        .set({ joinRole: role, updatedAt: new Date() })
+        .where(eq(t.ssoProvider.id, row.id))
+        .returning();
+      if (!next) return fail("NOT_FOUND", "The provider wasn't updated.");
+      await recordFor(caller, {
+        action: "sso.provider_updated",
+        target: { type: "sso_provider", name: next.name },
+        fields: ["joinRole"],
+        detail: { protocol: next.samlConfig ? "saml" : "oidc", domain: next.domain, joinRole: role },
       });
       return ok(await view(next, true));
     },
