@@ -151,9 +151,9 @@ function StepRow({ step, runId }: { step: RunStep; runId?: string | undefined })
 }
 
 /**
- * A run's summary row and, under it, its steps: open while the run works, collapsed once it's done, unless
- * someone opened or closed them by hand. `pair` starts the summary row (Pair); `aside` ends it (the path
- * label, Unverified).
+ * A run's summary row and, under it, its steps: open while the run works, folded once its answer is being written (so
+ * nothing above the answer moves when it lands) or the run is done, unless someone opened or closed them by hand.
+ * `pair` starts the summary row (Pair); `aside` ends it (the path label, Unverified).
  */
 export function RunStepsView({
   summary,
@@ -163,10 +163,16 @@ export function RunStepsView({
   pair,
   onTrace,
   runId,
+  answering = false,
+  landing = false,
 }: {
   summary: string;
   steps: RunStep[];
   status: "active" | "done" | "stopped" | "failed";
+  /** Its answer is being written below it. */
+  answering?: boolean;
+  /** Seen working here: what the summary row gains as the run ends grows in. */
+  landing?: boolean;
   aside?: React.ReactNode;
   pair?: React.ReactNode;
   /** Opens the run's full trace: its timeline, under its steps. */
@@ -175,7 +181,7 @@ export function RunStepsView({
   runId?: string;
 }) {
   const [chosen, setChosen] = useState<boolean | null>(null);
-  const open = chosen ?? status === "active";
+  const open = chosen ?? (status === "active" && !answering);
   const setOpen = (fn: (v: boolean) => boolean) => setChosen(fn(open));
   const icon =
     status === "active" ? (
@@ -209,9 +215,15 @@ export function RunStepsView({
             ) : null}
           </button>
         </div>
-        {aside}
+        {/* Arriving while it's watched (the answer landing), it grows open: in a narrow panel it wraps to a line of
+            its own, and the answer below slides down rather than jumps. */}
+        {aside ? (
+          <div className={landing ? "enter-grow" : undefined}>
+            <div className="flex flex-wrap items-center gap-2">{aside}</div>
+          </div>
+        ) : null}
       </div>
-      {/* The steps fold away smoothly once the answer is in, and open again on a press. */}
+      {/* The steps fold away smoothly once the answer is being written, and open again on a press. */}
       {steps.length || status === "active" ? (
         <Disclose open={open} className="pt-2">
           <ul aria-live="polite" className="flex flex-col gap-0.5 ps-1">

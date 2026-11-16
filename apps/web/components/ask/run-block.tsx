@@ -121,8 +121,11 @@ export function RunBlock({
   }, [active, run.status, status, queryClient]);
 
   const steps = useMemo(() => runSteps(polled.data?.events ?? [], { source }), [polled.data?.events, source]);
-  // The answer as it streams: shown with every number a pill until the checked answer replaces it.
+  // The answer as it streams: shown with every number a pill until the checked answer lands in its place.
   const draft = useMemo(() => answerDraft(polled.data?.events ?? []), [polled.data?.events]);
+  // A draft shown here: its checked answer lands where it was, without rising in again.
+  const draftShown = useRef(false);
+  if ((active || finishing) && draft) draftShown.current = true;
   // What the analyst remembered for the asker in this run, or let go on their word.
   const remembered = useMemo(
     () =>
@@ -327,6 +330,8 @@ export function RunBlock({
     return () => clearTimeout(timer);
   }, [pair.moving]);
 
+  // Its path is labelled when it has numbers or charts to label.
+  const labelled = answer !== null && !(answer.checked?.numbers === 0 && !answer.charts?.length);
   const viewStatus = active ? "active" : status === "cancelled" ? "stopped" : status === "failed" ? "failed" : "done";
   // A build: one card at the top, its pages ticked as they land, above the steps. Only a run that builds (it
   // started the dashboard, or writes it a page at a time): a small change has no card.
@@ -344,6 +349,8 @@ export function RunBlock({
       summary={summary}
       steps={steps}
       status={viewStatus}
+      answering={draft !== null}
+      landing={seenWorking.current}
       runId={run.id}
       pair={<Pair state={pair.state} still={!pair.moving && !gesture} />}
       {...(onTrace ? { onTrace: () => onTrace(run.id) } : {})}
@@ -355,11 +362,9 @@ export function RunBlock({
             <Info className="size-3.5 text-muted-tertiary" aria-hidden />
             Not answered from your data
           </span>
-        ) : answer ? (
+        ) : answer && (labelled || !answer.verified) ? (
           <>
-            {answer.checked?.numbers === 0 && !answer.charts?.length ? null : (
-              <PathLabel path={answer.path === "metric" ? "metric" : "unmodelled"} />
-            )}
+            {labelled ? <PathLabel path={answer.path === "metric" ? "metric" : "unmodelled"} /> : null}
             {!answer.verified ? <StatusBadge status="unverified" /> : null}
           </>
         ) : null
@@ -490,7 +495,7 @@ export function RunBlock({
         ) : null}
         {(active || finishing) && draft ? (
           <div className="enter-fade">
-            <AnswerDraft draft={draft} />
+            <AnswerDraft draft={draft.text} held={draft.held} />
           </div>
         ) : null}
       </div>
@@ -502,8 +507,12 @@ export function RunBlock({
   return (
     <div className="flex flex-col gap-3">
       {header}
-      {/* The checked answer rises in where its draft was, when it was seen being written (motion). */}
-      <div className={`flex flex-col gap-3 ${seenWorking.current ? "enter-rise" : ""}`}>
+      {/* Seen being written, the checked answer lands where its draft was: its text stays put and its numbers fade in
+          where the pills were, while what the draft didn't have grows or rises in around it. Seen working without a
+          draft, it rises in (motion). */}
+      <div
+        className={`flex flex-col gap-3 ${draftShown.current ? "answer-landing" : seenWorking.current ? "enter-rise" : ""}`}
+      >
         <AnswerBody
           answer={answer}
           question={question}
