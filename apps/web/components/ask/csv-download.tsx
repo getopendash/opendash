@@ -1,6 +1,6 @@
 "use client";
 
-import type { AnswerSegment, ResolvedChart } from "@opendash/core";
+import type { AnswerSegment, ResolvedChart, ResolvedFigure } from "@opendash/core";
 import { DownloadMenu } from "@opendash/ui";
 import { useQueries } from "@tanstack/react-query";
 import { useState } from "react";
@@ -16,19 +16,23 @@ export const chartQueries = (chart: Pick<ResolvedChart, "series">): string[] => 
   ...new Set(chart.series.flatMap((s) => s.points.flatMap((p) => (p ? [p.cell.queryRunId] : [])))),
 ];
 
-/** The queries behind an answer: the ones its numbers cite, then its charts'. */
+/** The queries behind an answer: the ones its numbers cite (its headline figures' too), then its charts'. */
 export function answerQueries(answer: {
   segments?: { markdown: AnswerSegment[]; caveats: AnswerSegment[][]; interpretation: AnswerSegment[][] } | null;
   charts?: Pick<ResolvedChart, "series">[] | null;
+  figures?: ResolvedFigure[] | null;
 }): string[] {
+  const figures = answer.figures ?? [];
   const segments = [
     ...(answer.segments?.markdown ?? []),
     ...(answer.segments?.caveats.flat() ?? []),
     ...(answer.segments?.interpretation.flat() ?? []),
+    ...figures.flatMap((f) => [...f.value, ...(f.change?.segments ?? []), ...(f.detail ?? [])]),
   ];
   return [
     ...new Set([
       ...segments.flatMap((s) => ("ref" in s ? s.citations.map((c) => c.queryRunId) : [])),
+      ...figures.flatMap((f) => (f.trend?.points ?? []).map((p) => p.cell.queryRunId)),
       ...(answer.charts ?? []).flatMap(chartQueries),
     ]),
   ];

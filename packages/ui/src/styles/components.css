@@ -554,6 +554,7 @@
   }
 
   .answer-landing > .answer-body__chips > *,
+  .answer-landing > .answer-body__title > *,
   .answer-landing > .answer-body__figures > * {
     min-height: 0;
     overflow: clip;

@@ -49,7 +49,11 @@ export function AnswerBody({
   return (
     <>
       {/* Its heading, chips, figures and text are named for an answer landing where its draft was (`.answer-landing`). */}
-      {answer.title ? <h2 className="answer-body__title text-lead font-semibold">{answer.title}</h2> : null}
+      {answer.title ? (
+        <div className="answer-body__title">
+          <h2 className="text-lead font-semibold">{answer.title}</h2>
+        </div>
+      ) : null}
       {segments?.interpretation.length ? (
         <div className="answer-body__chips">
           <div className="flex flex-wrap gap-1.5">
@@ -74,7 +78,12 @@ export function AnswerBody({
       ) : null}
       {answer.figures?.length ? (
         <div className="answer-body__figures">
-          <AnswerFigures figures={answer.figures} inspected={inspected} onTrace={onTrace} />
+          <AnswerFigures
+            figures={answer.figures}
+            inspected={inspected}
+            unverified={!answer.verified}
+            onTrace={onTrace}
+          />
         </div>
       ) : null}
       <div className="answer-body__text">

@@ -4,7 +4,8 @@
 import type { ResolvedFigure, RunOutcome } from "@opendash/core";
 import { describe, expect, it } from "vitest";
 import { answerCard } from "../src/card";
-import { changeLine, figureCards, figureFields } from "../src/figures";
+import { changeLine, figureCards, figureFields, figureLines } from "../src/figures";
+import { fileSources, noticeText } from "../src/reply";
 
 const ref = (display: string, kind: "number" | "text" = "number") => ({
   ref: "q1:0:x",
@@ -81,7 +82,12 @@ describe("headline figures as Slack's cards", () => {
     expect(blocks).toEqual([
       {
         type: "section",
-        fields: [{ type: "mrkdwn", text: "*Acquisition*\n15,580\n▼ 5% vs last week" }],
+        fields: [
+          {
+            type: "mrkdwn",
+            text: "*Acquisition*\n15,580\n▼ 5% vs last week\n6,727 activated\nLast weeks: 6.0k · 6.2k · 6.7k",
+          },
+        ],
       },
       {
         type: "section",
@@ -129,5 +135,53 @@ describe("an answer with headline figures, as a card", () => {
   it("is a card for its figures alone; a heading alone isn't reason enough", () => {
     expect(answerCard(answer({ figures: [acquisition] }))?.blocks.map((b) => b.type)).toEqual(["carousel", "markdown"]);
     expect(answerCard(answer({ title: "Growth" }))).toBeNull();
+  });
+});
+
+describe("headline figures, said whole", () => {
+  it("take the sign off a change's own number, spaces and all", () => {
+    const spaced: ResolvedFigure = {
+      label: "Orders",
+      value: [ref("40")],
+      change: { segments: [{ text: " " }, ref("-10%"), { text: " " }], direction: "down" },
+    };
+    expect(changeLine(spaced)).toBe("▼ 10%");
+  });
+
+  it("go as fields, never a number cut, when a value can't fit a card whole", () => {
+    const huge: ResolvedFigure = { label: "Delta", value: [ref("9".repeat(160))] };
+    const blocks = figureCards([huge, acquisition]);
+    expect(blocks.map((b) => b.type)).toEqual(["section"]);
+    expect(JSON.stringify(blocks)).toContain("9".repeat(160));
+  });
+
+  it("are lines for a notification and a screen reader, whole lines within the room", () => {
+    expect(figureLines([acquisition])).toEqual(["Acquisition: 15,580 (▼ 5% vs last week)"]);
+    const said = { title: "Growth at a glance", figures: [acquisition] };
+    expect(noticeText(said, "Activated riders rose.")).toBe(
+      "Growth at a glance\nAcquisition: 15,580 (▼ 5% vs last week)\nActivated riders rose.",
+    );
+    expect(noticeText(said, "Activated riders rose.", 30)).toBe("Growth at a glance");
+  });
+
+  it("are files to download too: the queries behind a figure and its trend", () => {
+    const traced = (queryRunId: string) => ({
+      ...ref("1"),
+      citations: [{ alias: "q1", queryRunId, row: 0, column: "x" }],
+    });
+    const outcome = {
+      kind: "answer",
+      citations: [],
+      figures: [
+        {
+          label: "A",
+          value: [traced("run-a")],
+          trend: {
+            points: [{ value: 1, display: "1", cell: { alias: "q2", queryRunId: "run-t", row: 0, column: "x" } }],
+          },
+        },
+      ],
+    } as unknown as RunOutcome;
+    expect(fileSources(outcome)).toEqual(["run-a", "run-t"]);
   });
 });

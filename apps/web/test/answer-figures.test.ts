@@ -1,12 +1,12 @@
 // An answer's headline figures on the page: a card each, in a group under its heading, its value a traced number, its
-// change with an arrow from its sign (the number without it), a line more, and its trend as bars (its values said to a
+// change with an arrow and its number as Sources shows it (signed), a line more, and its trend as bars (its values said to a
 // screen reader).
 import type { ResolvedFigure } from "@opendash/core";
 import { createElement } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 import { describe, expect, it } from "vitest";
 
-const { AnswerFigures } = await import("../components/ask/answer-figures");
+const { AnswerFigures, figureLines } = await import("../components/ask/answer-figures");
 
 const ref = (display: string) => ({
   ref: "q1:0:x",
@@ -35,11 +35,9 @@ describe("an answer's headline figures on the page", () => {
         trend: { label: "Last weeks", points: [point("6.0k", 6000, 0), point("6.7k", 6700, 1)] },
       },
     ]);
-    for (const part of ["Activated riders", "6,727", "▲", "6.1%", "vs last week", "43%", " of trials", "sparkline"]) {
+    for (const part of ["Activated riders", "6,727", "▲", "+6.1%", "vs last week", "43%", " of trials", "sparkline"]) {
       expect(html).toContain(part);
     }
-    // The arrow says the direction; the number shows without its sign.
-    expect(html).not.toContain("+6.1%");
     expect(html).toContain("Last weeks: 6.0k, 6.7k");
     expect(html).toContain("traced-number");
   });
@@ -53,5 +51,33 @@ describe("an answer's headline figures on the page", () => {
     expect(html.match(/<section/g)).toHaveLength(2);
     expect(html.indexOf("Paid channels")).toBeLessThan(html.indexOf("Google Ads"));
     expect(html.indexOf("Acquisition")).toBeLessThan(html.indexOf("Paid channels"));
+  });
+});
+
+describe("an answer's headline figures, said in full", () => {
+  it("say a trend that goes below zero in numbers, since bars start at zero", () => {
+    const html = draw([
+      {
+        label: "Net profit",
+        value: [ref("-$10")],
+        trend: { label: "By month", points: [point("-$100", -100, 0), point("-$50", -50, 1), point("-$10", -10, 2)] },
+      },
+    ]);
+    expect(html).toContain("By month: -$100 · -$50 · -$10");
+    expect(html).not.toContain("sparkline");
+  });
+
+  it("copy as lines, the change as its number shows it", () => {
+    expect(
+      figureLines([
+        {
+          label: "Orders",
+          value: [ref("40")],
+          change: { segments: [ref("-20%")], direction: "down" },
+          vs: "vs last month",
+        },
+        { label: "Revenue", value: [ref("$1.2k")] },
+      ]),
+    ).toEqual(["Orders: 40 (▼ -20% vs last month)", "Revenue: $1.2k"]);
   });
 });

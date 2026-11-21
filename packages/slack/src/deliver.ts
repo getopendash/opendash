@@ -58,6 +58,7 @@ import {
   type Event,
   fileSources,
   fileStem,
+  noticeText,
   pdfAnswer,
   quiet,
   replyBlocks,
@@ -641,8 +642,8 @@ class Reply {
       last,
       (blocks, withCard) =>
         this.post(part, {
-          // What a notification shows, where blocks can't be.
-          text: markdown.slice(0, 300),
+          // What a notification and a screen reader say, where blocks can't be: its heading and figures too.
+          text: noticeText(said, markdown),
           blocks: [...(withCard ? withCard.blocks : [{ type: "markdown", text: markdown }]), ...(blocks ?? [])],
         }),
       card,

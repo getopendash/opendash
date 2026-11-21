@@ -15,7 +15,7 @@ import {
 import { queryCsv } from "@opendash/core/csv";
 import { flatLine, visibleLinks } from "@opendash/markdown";
 import { spelledOut } from "./ask";
-import { figureFields } from "./figures";
+import { figureFields, figureLines } from "./figures";
 import { LEARNING_SUGGEST } from "./learning";
 
 /** A run event, as the reply reads it. */
@@ -179,6 +179,8 @@ export interface ReplyText {
   downloads: Download[];
   /** Its headline figures: cards in a card, Slack's classic fields under today's message. */
   figures: ResolvedFigure[];
+  /** Its heading, when it gave one: a card's header, over the fields under today's message. */
+  title: string | null;
 }
 
 /** A file the Download menu offers: its words, and what a press asks for (the run and the file, nothing said). */
@@ -235,13 +237,20 @@ export function pdfAnswer(outcome: RunOutcome | null | undefined): Answer | null
  */
 export function fileSources(outcome: RunOutcome | null | undefined): string[] {
   if (outcome?.kind !== "answer") return [];
+  // A figure's numbers and its trend's cells are the answer's too.
+  const figured = (outcome.figures ?? []).flatMap((f) => [
+    ...[...(f?.value ?? []), ...(f?.change?.segments ?? []), ...(f?.detail ?? [])].flatMap((s) =>
+      "ref" in s ? s.citations.map((c) => c.queryRunId) : [],
+    ),
+    ...(f?.trend?.points ?? []).map((p) => p.cell.queryRunId),
+  ]);
   // Read with care: a chart of an older or odd shape has no series to read.
   const charted = (outcome.charts ?? []).flatMap((c) =>
     (c?.series ?? []).flatMap((s) =>
       (s?.points ?? []).flatMap((p) => (typeof p?.cell?.queryRunId === "string" ? [p.cell.queryRunId] : [])),
     ),
   );
-  return [...new Set([...citedQueries(outcome), ...charted])];
+  return [...new Set([...citedQueries(outcome), ...figured, ...charted])];
 }
 
 /**
@@ -276,6 +285,7 @@ const plain = (body: string, url: string, label = "Open in OpenDash", answered =
   context: { reading: null, caveats: [] },
   downloads: [],
   figures: [],
+  title: null,
 });
 
 /**
@@ -369,6 +379,7 @@ export function replyText(outcome: RunOutcome | null, status: string, url: strin
     context: { reading: outcome.interpretation.join(" · ") || null, caveats: outcome.caveats },
     downloads: [],
     figures: outcome.figures ?? [],
+    title: outcome.title ?? null,
   };
 }
 
@@ -422,7 +433,11 @@ export function replyBlocks(
   figures = true,
 ): Record<string, unknown>[] {
   const blocks: Record<string, unknown>[] = [];
-  if (figures && said.figures.length) blocks.push(...figureFields(said.figures));
+  if (figures && said.figures.length) {
+    if (said.title)
+      blocks.push({ type: "header", text: { type: "plain_text", text: quiet(said.title).slice(0, 150), emoji: true } });
+    blocks.push(...figureFields(said.figures));
+  }
   // How it read the question, then each caveat: quiet lines under the words, as plain text.
   // As quiet plain lines, when each says what its Markdown does, fits one, and there are few enough; else as today's
   // Markdown (italic, quoted), whole, never cut.
@@ -561,4 +576,19 @@ export function cardCsv(card: Pick<QueryCard, "title" | "alias" | "columns" | "p
 } {
   const { filename, text } = queryCsv(card);
   return { filename, data: Buffer.from(text, "utf8") };
+}
+
+/**
+ * What a notification and a screen reader say of an answer's message (its text beside its blocks): its heading, its
+ * figures as lines, then its first words; whole lines only, within Slack's room for it.
+ */
+export function noticeText(said: Pick<ReplyText, "title" | "figures">, markdown: string, room = 3_000): string {
+  const lines = [said.title ?? "", ...figureLines(said.figures), markdown].filter((l) => l.trim());
+  let out = "";
+  for (const line of lines) {
+    const next = out ? `${out}\n${line}` : line;
+    if (next.length > room) return out || line.slice(0, room);
+    out = next;
+  }
+  return out;
 }

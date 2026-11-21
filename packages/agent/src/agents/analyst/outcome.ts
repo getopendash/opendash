@@ -153,7 +153,10 @@ export async function analystOutcome(deps: AgentDeps, run: ClaimedRun): Promise<
       ...gate.segments.caveats.flat(),
       ...gate.segments.interpretation.flat(),
       ...figureSegments,
-    ].flatMap((seg) => ("ref" in seg && seg.kind === "number" ? seg.citations.map((c) => c.alias) : [])),
+    ]
+      .flatMap((seg) => ("ref" in seg && seg.kind === "number" ? seg.citations.map((c) => c.alias) : []))
+      // A figure's trend shows its cells too: a trend from own SQL makes the answer's path its own.
+      .concat(gate.figures.flatMap((f) => f.trend?.points.map((p) => p.cell.alias) ?? [])),
   );
   const path =
     cited.size > 0 && [...cited].every((a) => results.find((r) => r.alias === a)?.path === "metric")

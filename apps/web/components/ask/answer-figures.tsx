@@ -6,9 +6,21 @@ import { AnswerText, type TracedRef } from "./answer-text";
 
 const ARROW = { up: "▲", down: "▼", flat: "→" } as const;
 
-/** A change's segments without its sign: the arrow says the direction, the number its size. */
-const unsigned = (segments: AnswerSegment[]): AnswerSegment[] =>
-  segments.map((s) => ("ref" in s ? { ...s, display: s.display.replace(/^[+\-−]\s*/, "") } : s));
+/** Segments as shown: each reference its display. */
+const shownOf = (segments: AnswerSegment[]) => segments.map((s) => ("ref" in s ? s.display : s.text)).join("");
+
+/**
+ * The figures as plain lines, for Copy: "Orders: 40 (▼ -20% vs last month)", the change as its number shows it, so the
+ * copy says what Sources does.
+ */
+export function figureLines(figures: ResolvedFigure[]): string[] {
+  return figures.map((f) => {
+    const change = [f.change ? `${ARROW[f.change.direction]} ${shownOf(f.change.segments).trim()}` : "", f.vs ?? ""]
+      .filter(Boolean)
+      .join(" ");
+    return `${f.label}: ${shownOf(f.value).trim()}${change ? ` (${change})` : ""}`;
+  });
+}
 
 /** The figures in their groups, in the order they were given (the ungrouped ones as their own group). */
 function grouped(figures: ResolvedFigure[]): { name: string | null; figures: { f: ResolvedFigure; at: number }[] }[] {
@@ -30,10 +42,13 @@ function grouped(figures: ResolvedFigure[]): { name: string | null; figures: { f
 export function AnswerFigures({
   figures,
   inspected,
+  unverified = false,
   onTrace,
 }: {
   figures: ResolvedFigure[];
   inspected: string | null;
+  /** The answer didn't pass every check: its figures' numbers are marked as its text's are. */
+  unverified?: boolean;
   onTrace: (ref: TracedRef, key: string) => void;
 }) {
   return (
@@ -51,6 +66,7 @@ export function AnswerFigures({
                     scope={`figure-${at}`}
                     className="text-number-lg"
                     selected={inspected}
+                    unverified={unverified}
                     onTrace={onTrace}
                   />
                 </span>
@@ -61,10 +77,11 @@ export function AnswerFigures({
                         <span aria-hidden>{ARROW[f.change.direction]}</span>
                         <span className="sr-only">{f.change.direction}</span>
                         <AnswerText
-                          segments={unsigned(f.change.segments)}
+                          segments={f.change.segments}
                           scope={`figure-${at}-change`}
                           className="text-small"
                           selected={inspected}
+                          unverified={unverified}
                           onTrace={onTrace}
                         />
                       </>
@@ -78,10 +95,16 @@ export function AnswerFigures({
                     scope={`figure-${at}-detail`}
                     className="text-small text-muted"
                     selected={inspected}
+                    unverified={unverified}
                     onTrace={onTrace}
                   />
                 ) : null}
-                {f.trend && f.trend.points.length > 1 ? (
+                {/* Bars for a trend of amounts; one that goes below zero is said in numbers (bars start at zero). */}
+                {f.trend && f.trend.points.length > 1 && f.trend.points.some((p) => p.value < 0) ? (
+                  <span className="mt-1 text-small text-muted-tertiary">
+                    {`${f.trend.label ?? "Trend"}: ${f.trend.points.map((p) => p.display).join(" · ")}`}
+                  </span>
+                ) : f.trend && f.trend.points.length > 1 ? (
                   <div className="mt-1 flex items-end justify-between gap-2">
                     {f.trend.label ? <span className="text-small text-muted-tertiary">{f.trend.label}</span> : null}
                     <Sparkline values={f.trend.points.map((p) => p.value)} className="ms-auto h-6 w-20" />

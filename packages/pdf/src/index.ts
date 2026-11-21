@@ -217,7 +217,13 @@ function chartSource(chart: Chart, names: Map<string, QueryName>): string | null
 /** The appendix: each traced number once, with the query and cell it came from. */
 function traceRows(answer: Answer, names: Map<string, QueryName>): Extract<Block, { kind: "trace" }>["rows"] {
   const segs = answer.segments;
-  const refs = [...(segs?.markdown ?? []), ...(segs?.caveats.flat() ?? []), ...(segs?.interpretation.flat() ?? [])];
+  const figures = answer.figures ?? [];
+  const refs = [
+    ...figures.flatMap((f) => [...f.value, ...(f.change?.segments ?? []), ...(f.detail ?? [])]),
+    ...(segs?.markdown ?? []),
+    ...(segs?.caveats.flat() ?? []),
+    ...(segs?.interpretation.flat() ?? []),
+  ];
   const seen = new Set<string>();
   const rows: Extract<Block, { kind: "trace" }>["rows"] = [];
   for (const s of refs) {
@@ -235,7 +241,67 @@ function traceRows(answer: Answer, names: Map<string, QueryName>): Extract<Block
       cell: `${rowsOf.length > 1 ? `rows ${rowsOf.join(", ")}` : `row ${rowsOf[0]}`} · ${[...new Set(cells.map((c) => c.column))].join(", ")}`,
     });
   }
+  // A figure's trend: its values, each a cell of one column.
+  for (const f of figures) {
+    const points = f.trend?.points ?? [];
+    const first = points[0]?.cell;
+    if (!first) continue;
+    const name = names.get(first.queryRunId);
+    const alias = name?.alias ?? first.alias;
+    rows.push({
+      figure: points.map((p) => p.display).join(" · "),
+      query: name?.title ? `${alias} · ${name.title}` : alias,
+      cell: `rows ${points.map((p) => p.cell.row + 1).join(", ")} · ${first.column}`,
+    });
+  }
   return rows;
+}
+
+const ARROW = { up: "▲", down: "▼", flat: "→" } as const;
+
+/**
+ * An answer's title and headline figures, as the page draws them above its text: the title a heading, each group of
+ * figures a table (the figure, its value, its change with what it's against, a line more and its trend) under its
+ * group's heading.
+ */
+function figureBlocks(answer: Answer): Block[] {
+  const figures = answer.figures ?? [];
+  const blocks: Block[] = answer.title ? [{ kind: "heading", runs: [{ text: answer.title, style: "bold" }] }] : [];
+  const groups: { name: string | null; figures: typeof figures }[] = [];
+  for (const f of figures) {
+    const name = f.group ?? null;
+    const at = groups.find((g) => g.name === name);
+    if (at) at.figures.push(f);
+    else groups.push({ name, figures: [f] });
+  }
+  const text = (t: string): Run[] => (t ? [{ text: t, style: "regular" }] : []);
+  for (const g of groups) {
+    if (g.name) blocks.push({ kind: "paragraph", runs: [{ text: g.name, style: "bold" }] });
+    blocks.push({
+      kind: "table",
+      header: [text("Figure"), text("Value"), text("Change"), text("More")],
+      align: ["left", "right", "left", "left"],
+      rows: g.figures.map((f) => [
+        text(f.label),
+        lineOf(f.value),
+        [
+          ...(f.change
+            ? [{ text: `${ARROW[f.change.direction]} `, style: "regular" as const }, ...lineOf(f.change.segments)]
+            : []),
+          ...text(f.vs ? ` ${f.vs}` : ""),
+        ],
+        [
+          ...(f.detail ? lineOf(f.detail) : []),
+          ...text(
+            f.trend
+              ? `${f.detail ? " · " : ""}${f.trend.label ?? "Trend"}: ${f.trend.points.map((p) => p.display).join(" · ")}`
+              : "",
+          ),
+        ],
+      ]),
+    });
+  }
+  return blocks;
 }
 
 /**
@@ -261,6 +327,7 @@ export function answerBlocks(
     { kind: "title", text: context.question },
     { kind: "note", text: `${context.note}${answer.verified ? "" : " Some of it couldn't be verified."}` },
     ...(chips.length ? [{ kind: "chips" as const, items: chips }] : []),
+    ...figureBlocks(answer),
     ...(segs ? textBlocks(segs.markdown) : textBlocks([{ text: answer.rendered }] as Segment[])),
     ...(answer.charts ?? []).map((chart) => ({
       kind: "chart" as const,

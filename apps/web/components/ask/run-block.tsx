@@ -21,6 +21,7 @@ import { answerDraft, type RunStep, runSteps, runSummary } from "@/lib/run-steps
 import { AnswerBody } from "./answer-body";
 import { AnswerDraft } from "./answer-draft";
 import { AnswerFeedback } from "./answer-feedback";
+import { figureLines } from "./answer-figures";
 import { RepeatAnswer, WatchAnswer } from "./answer-routines";
 import type { TracedRef } from "./answer-text";
 import { BuildCard } from "./build-card";
@@ -547,7 +548,16 @@ export function RunBlock({
           <Button
             size="sm"
             variant="outline"
-            onPress={() => void navigator.clipboard?.writeText(answer.rendered).catch(() => {})}
+            // Its heading and headline figures too: what the cards show is part of the answer.
+            onPress={() =>
+              void navigator.clipboard
+                ?.writeText(
+                  [answer.title ?? "", ...figureLines(answer.figures ?? []), answer.rendered]
+                    .filter((l) => l.trim())
+                    .join("\n\n"),
+                )
+                .catch(() => {})
+            }
           >
             <Copy className="size-3.5" aria-hidden />
             Copy
