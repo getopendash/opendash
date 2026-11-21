@@ -71,6 +71,16 @@ export async function slackReplyPartPosted(
     where org_id = ${orgId} and run_id = ${runId} and part = ${part}`);
 }
 
+/** Throws `SlackReplyFenced` unless `attempt` is still the reply's latest: checked again before a second try at a send. */
+export async function checkSlackReplyAttempt(
+  tx: TenantTx,
+  orgId: string,
+  runId: string,
+  attempt: number,
+): Promise<void> {
+  await fence(tx, orgId, runId, attempt);
+}
+
 /** Whether any attempt claimed a part of the reply (posted or not): a mark one leaves for the next. */
 export async function slackReplyPartBegun(tx: TenantTx, orgId: string, runId: string, part: string): Promise<boolean> {
   const [r] = await tx.execute<{ part: string }>(sql`

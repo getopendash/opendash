@@ -7,8 +7,16 @@ import type { ResolvedChart, RunOutcome } from "@opendash/core";
 import { describe, expect, it } from "vitest";
 import { answerCard, nativeChart, shorten, TABLE_PAGE } from "../src/card";
 
-const answer = (rendered: string, over: Record<string, unknown> = {}): RunOutcome =>
-  ({
+type Ref = { ref: string; display: string; kind: "text"; citations: [] };
+/** A reference as the gate leaves it in the segments: what it shows. */
+const ref = (display: string): Ref => ({ ref: "q1:0:x", display, kind: "text", citations: [] });
+
+/** An answer as the gate leaves it: `parts` its text in segments (a string is text, `ref(…)` a reference). */
+const answer = (text: string | (string | Ref)[], over: Record<string, unknown> = {}): RunOutcome => {
+  const parts = typeof text === "string" ? [text] : text;
+  const markdown = parts.map((p): { text: string } | Ref => (typeof p === "string" ? { text: p } : p));
+  const rendered = markdown.map((p) => ("ref" in p ? p.display : p.text)).join("");
+  return {
     kind: "answer",
     status: "answered",
     verified: true,
@@ -20,8 +28,10 @@ const answer = (rendered: string, over: Record<string, unknown> = {}): RunOutcom
     citations: [{ queryRunId: "q-run-1" }],
     values: [],
     problems: [],
+    segments: { markdown, caveats: [], interpretation: [] },
     ...over,
-  }) as unknown as RunOutcome;
+  } as unknown as RunOutcome;
+};
 
 const chart = (over: Partial<ResolvedChart> = {}, values: (number | null)[] = [12, 7]): ResolvedChart => ({
   type: "bar",
@@ -81,6 +91,55 @@ describe("an answer's card", () => {
     expect(answerCard(answer(TABLE), address)?.blocks[0]).toEqual({ type: "markdown", text: "<@UPRIYA> " });
   });
 
+  it("reads the table with each value a placeholder: a value with a pipe stays in its cell", () => {
+    const card = answerCard(answer(["| Plan | Accounts |\n|---|---:|\n| ", ref("Growth | 7"), " | ", ref("12"), " |"]));
+    const [table] = card?.blocks ?? [];
+    expect(((table?.rows ?? []) as { text: string }[][]).map((r) => r.map((c) => c.text))).toEqual([
+      ["Plan", "Accounts"],
+      ["Growth | 7", "12"],
+    ]);
+  });
+
+  it("puts each value back in the words as the gate showed it, quieted", () => {
+    const card = answerCard(answer(["MRR is ", ref("$48.2k"), " for ", ref("<!channel>"), ":\n\n", TABLE]));
+    // As today's message says it: the mention broken up (an invisible joiner after the `<`), so it notifies nobody.
+    expect(card?.blocks[0]?.text).toMatch(/^MRR is \$48\.2k for /);
+    expect(card?.blocks[0]?.text).not.toContain("<!channel>");
+  });
+
+  it("leaves a table in the words when a cell holds struck text or a link that hides its address", () => {
+    expect(answerCard(answer("| Plan | Accounts |\n|---|---|\n| Growth | ~~12~~ **14** |"))).toBeNull();
+    // A link in a cell is shown with its address (as the words show links), so the cell says where it goes.
+    const linked = answerCard(answer("| Plan | Docs |\n|---|---|\n| Growth | [guide](https://docs.example/g) |"));
+    expect(((linked?.blocks[0]?.rows ?? []) as { text: string }[][])[1]?.[1]?.text).toBe(
+      "guide (https://docs.example/g)",
+    );
+  });
+
+  it("shows a reference link's address before the table when its definition comes after it", () => {
+    const card = answerCard(answer(`See [the guide][g].\n\n${TABLE}\n\n[g]: https://docs.example/g`));
+    expect(card?.blocks[0]?.text).toBe("See the guide (https://docs.example/g).");
+  });
+
+  it("keeps an indented block after the table indented", () => {
+    const card = answerCard(answer(`${TABLE}\n\n    # not a heading`));
+    expect(card?.blocks[1]?.text).toBe("    # not a heading");
+  });
+
+  it("keeps text that looks like an emoji code as written, in cells and titles", () => {
+    const card = answerCard(
+      answer("| Plan | Note |\n|---|---|\n| Growth | {{emoji:bulb}} |", {
+        charts: [chart({ title: "Ideas {{emoji:bulb}}" })],
+      }),
+    );
+    expect(JSON.stringify(card?.blocks)).not.toContain(":bulb:");
+    expect(JSON.stringify(card?.blocks)).toContain("{{emoji:bulb}}");
+  });
+
+  it("is today's message for an older answer with no segments to read its table from", () => {
+    expect(answerCard(answer(TABLE, { segments: undefined, charts: [chart()] }))).toBeNull();
+  });
+
   it("quiets mentions and shows every link's address, in the words and in the cells", () => {
     const card = answerCard(
       answer(`Tell <!channel> and [the team](https://evil.example/x):\n\n| Who | N |\n|---|---|\n| <!here> @ops | 3 |`),
@@ -118,6 +177,16 @@ describe("an answer's card", () => {
         ],
       },
     });
+  });
+
+  it("leaves a second chart whose title reads the same once cut as an image", () => {
+    const long = "Monthly recurring revenue by plan and by region, ";
+    const card = answerCard(
+      answer("Before and after.", {
+        charts: [chart({ title: `${long}before discounts` }), chart({ title: `${long}after discounts` })],
+      }),
+    );
+    expect(card?.charts).toEqual([0]);
   });
 
   it("skips a chart Slack can't draw as the page does, and takes the next", () => {
@@ -159,7 +228,14 @@ describe("a chart as Slack's own", () => {
       chart: { yLabel: "%", series: [{ values: [6.1, 12.34] }] },
     });
     const usd = nativeChart(chart({ axis: { currency: "USD", compact: true } }, [1234.567, 99]));
-    expect(usd).toMatchObject({ chart: { yLabel: "USD", series: [{ values: [1234.57, 99] }] } });
+    expect(usd).toMatchObject({ chart: { yLabel: "USD", series: [{ values: [1234.567, 99] }] } });
+  });
+
+  it("never rounds a value away: a tiny share stays above zero, a cent boundary as it is", () => {
+    const tiny = nativeChart(chart({ axis: { percent: true, compact: false } }, [0.000001, 0.07]));
+    expect(tiny).toMatchObject({ chart: { series: [{ values: [0.0001, 7] }] } });
+    const cents = nativeChart(chart({ axis: { currency: "USD", compact: false } }, [1.005, 2]));
+    expect(cents).toMatchObject({ chart: { series: [{ values: [1.005, 2] }] } });
   });
 
   it("cuts a long title and labels to Slack's length, unless that makes two labels the same", () => {

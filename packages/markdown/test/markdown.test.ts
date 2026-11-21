@@ -147,7 +147,11 @@ describe("an answer's first table, taken out", () => {
         ["Growth", "12"],
         ["Scale", ""],
       ],
+      // A link whose words aren't its address: plain text would lose where it goes.
+      flat: false,
     });
+    expect(takeTable("| A | B |\n|---|---|\n| **1** | https://x.example |")?.flat).toBe(true);
+    expect(takeTable("| A |\n|---|\n| ~~12~~ 14 |")?.flat).toBe(false);
   });
 
   it("takes only the first, at the top: one in a list, a quote or code stays where it is", () => {

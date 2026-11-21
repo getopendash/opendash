@@ -131,6 +131,11 @@ export interface TakenTable {
   /** Its cells as plain text, every row as wide as its header. */
   head: string[];
   rows: string[][];
+  /**
+   * Whether every cell says the same as plain text: false when one holds struck text or a link (`~~12~~ 14` would
+   * read as a current 12; a link would lose where it goes).
+   */
+  flat: boolean;
 }
 
 /**
@@ -143,19 +148,36 @@ export function takeTable(source: string): TakenTable | null {
   const start = node?.position?.start.offset;
   const end = node?.position?.end.offset;
   if (node?.type !== "table" || start === undefined || end === undefined) return null;
+  let flat = true;
+  // A link says where it goes only when its text is its address (a bare one, as GFM finds them).
+  const bare = (t: string) => t.replace(/^(https?:\/\/|mailto:)/i, "").replace(/\/$/, "");
+  const unsaid = (parts: Inline[]): boolean =>
+    parts.some(
+      (p) =>
+        p.kind === "struck" ||
+        (p.kind === "link" && p.href !== null && bare(plainText(p.children).trim()) !== bare(p.href)) ||
+        ("children" in p && unsaid(p.children)),
+    );
+  const cell = (c: (typeof node.children)[number]["children"][number]) => {
+    const parts = inlines(c.children);
+    if (unsaid(parts)) flat = false;
+    return plainText(parts).trim();
+  };
   const [headRow, ...bodyRows] = node.children;
-  const head = (headRow?.children ?? []).map((c) => plainText(inlines(c.children)).trim());
+  const head = (headRow?.children ?? []).map(cell);
   const width = head.length;
   const row = (r: (typeof node.children)[number]) => {
-    const cells = r.children.slice(0, width).map((c) => plainText(inlines(c.children)).trim());
+    const cells = r.children.slice(0, width).map(cell);
     return [...cells, ...Array<string>(width - cells.length).fill("")];
   };
   return {
     before: source.slice(0, start).trimEnd(),
-    after: source.slice(end).trimStart(),
+    // Only the blank lines after it: an indented line keeps its indent (an indented code block stays code).
+    after: source.slice(end).replace(/^(?:[ \t]*\r?\n)+/, ""),
     align: (node.align ?? []).map((a) => a ?? null),
     head,
     rows: bodyRows.map(row),
+    flat,
   };
 }
 

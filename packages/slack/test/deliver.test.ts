@@ -126,6 +126,8 @@ const answer = (rendered: string, over: Record<string, unknown> = {}): RunOutcom
     citations: [],
     values: [],
     problems: [],
+    // Its text in segments, as the gate leaves it (here no references, so one piece of text).
+    segments: { markdown: [{ text: rendered }], caveats: [], interpretation: [] },
     ...over,
   }) as unknown as RunOutcome;
 
@@ -391,7 +393,8 @@ describe("a run's reply in Slack", () => {
         "There are **2** plans:\n\n| Plan | Accounts |\n|---|---:|\n| Growth | 12 |\n| Scale | 7 |\n\nGrowth leads.",
         {
           citations: [{ queryRunId }],
-          charts: [12, null].map((second, i) => ({
+          // The seeded rows: Growth 12, Scale 7 (the second chart missing Scale's).
+          charts: [7, null].map((scale, i) => ({
             type: "bar",
             title: i === 0 ? "Accounts by plan" : "Accounts with a gap",
             horizontal: false,
@@ -400,7 +403,7 @@ describe("a run's reply in Slack", () => {
             series: [
               {
                 name: "Accounts",
-                points: [7, second].map((value, row) =>
+                points: [12, scale].map((value, row) =>
                   value === null
                     ? null
                     : { value, display: String(value), cell: { alias: "q1", queryRunId, row, column: "accounts" } },
@@ -410,10 +413,15 @@ describe("a run's reply in Slack", () => {
           })),
         },
       );
+    /** The chart images whose upload Slack was told to finish (reserving a file isn't sending it). */
     const pngs = (calls: ReturnType<typeof from>) =>
       calls()
-        .filter((c) => c.method === "files.getUploadURLExternal" && String(c.args.filename).endsWith(".png"))
-        .map((c) => c.args.filename);
+        .filter((c) => c.method === "files.completeUploadExternal")
+        .flatMap((c) => {
+          const files = typeof c.args.files === "string" ? JSON.parse(c.args.files) : c.args.files;
+          return (files as { title?: string }[]).map((f) => String(f.title));
+        })
+        .filter((title) => title.startsWith("Accounts"));
 
     it("puts the answer in as Slack's own table and chart as the stream stops; the chart it can't draw goes as an image", async () => {
       const q = await question();
@@ -432,8 +440,22 @@ describe("a run's reply in Slack", () => {
         "data_visualization",
       ]);
       expect(blocks[0]?.text).toBe("There are **2** plans:");
+      // The chart's points are the query's cells, label by label.
+      expect(blocks[3]).toMatchObject({
+        title: "Accounts by plan",
+        chart: {
+          series: [
+            {
+              data: [
+                { label: "Growth", value: 12 },
+                { label: "Scale", value: 7 },
+              ],
+            },
+          ],
+        },
+      });
       expect(JSON.stringify(blocks)).toContain('"feedback_buttons"');
-      expect(pngs(calls)).toEqual(["accounts-with-a-gap.png"]);
+      expect(pngs(calls)).toEqual(["Accounts with a gap"]);
       expect(answers(q.runId)).toHaveLength(1);
     });
 
@@ -454,7 +476,7 @@ describe("a run's reply in Slack", () => {
       const taken = JSON.stringify(stops[1]?.args.blocks);
       for (const part of ['"data_table"', '"data_visualization"', '"opendash:rate:down"'])
         expect(taken).toContain(part);
-      expect(pngs(calls)).toEqual(["accounts-with-a-gap.png"]);
+      expect(pngs(calls)).toEqual(["Accounts with a gap"]);
     });
 
     it("says it as today's message where Slack refuses the card, marked so, with every chart as an image", async () => {
@@ -482,28 +504,46 @@ describe("a run's reply in Slack", () => {
       const [mark] = await s.t.owner<{ status: string }[]>`
         select status from app.slack_reply_message where run_id = ${q.runId} and part = 'card_refused'`;
       expect(mark?.status).toBe("posted");
-      expect(pngs(calls)).toEqual(["accounts-by-plan.png", "accounts-with-a-gap.png"]);
+      expect(pngs(calls)).toEqual(["Accounts by plan", "Accounts with a gap"]);
       expect(answers(q.runId)).toHaveLength(1);
     });
 
-    for (const refused of [false, true]) {
-      it(`sends a later attempt's images by what the earlier one's card drew (${refused ? "refused" : "taken"})`, async () => {
+    // What an earlier attempt left, and the images a later one sends for it.
+    const earlier = [
+      { left: ["card", "answer"], images: ["Accounts with a gap"], why: "sent as a card" },
+      { left: ["card", "card_refused", "answer"], images: ["Accounts by plan", "Accounts with a gap"], why: "refused" },
+      { left: ["answer"], images: ["Accounts by plan", "Accounts with a gap"], why: "sent with no mark, before cards" },
+    ];
+    for (const e of earlier) {
+      it(`sends a later attempt's images by what the earlier answer was (${e.why})`, async () => {
         const q = await question();
         await q.end(tabled(await cited(q.runId)));
-        // An earlier attempt posted the answer, with its card or (marked) without it, and stopped there.
-        const parts = refused ? ["answer", "card_refused"] : ["answer"];
-        for (const part of parts) {
+        for (const part of e.left) {
           await s.t.owner`insert into app.slack_reply_message (org_id, run_id, part, status, ts, posted_at)
             values (${s.orgId}, ${q.runId}, ${part}, 'posted', ${part === "answer" ? "1791799999.000200" : null}, now())`;
         }
         const calls = from();
         expect(await deliverSlackReply(deps, bot, slack, q.job)).toBe("done");
         expect(calls().some((c) => c.method === "chat.stopStream" && c.args.metadata)).toBe(false);
-        expect(pngs(calls)).toEqual(
-          refused ? ["accounts-by-plan.png", "accounts-with-a-gap.png"] : ["accounts-with-a-gap.png"],
-        );
+        expect(pngs(calls)).toEqual(e.images);
       });
     }
+
+    it("never tries the card again once an earlier attempt marked it refused and stopped before the answer went", async () => {
+      const q = await question();
+      await q.end(tabled(await cited(q.runId)));
+      for (const part of ["card", "card_refused"]) {
+        await s.t.owner`insert into app.slack_reply_message (org_id, run_id, part, status, posted_at)
+          values (${s.orgId}, ${q.runId}, ${part}, 'posted', now())`;
+      }
+      const calls = from();
+      expect(await deliverSlackReply(deps, bot, slack, q.job)).toBe("done");
+      const stops = calls().filter((c) => c.method === "chat.stopStream" && c.args.metadata);
+      expect(stops.map((c) => typeof c.args.markdown_text)).toEqual(["string"]);
+      expect(JSON.stringify(stops[0]?.args.blocks)).not.toMatch(/data_table|data_visualization/);
+      expect(pngs(calls)).toEqual(["Accounts by plan", "Accounts with a gap"]);
+      expect(answers(q.runId)).toHaveLength(1);
+    });
   });
 
   it("gives a question's options buttons of their own ids, and leaves the answer as it is when Slack refuses them", async () => {

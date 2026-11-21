@@ -17,6 +17,7 @@ import type { SlackAdapter } from "@chat-adapter/slack";
 import {
   answerAbout,
   beginSlackReplyAttempt,
+  checkSlackReplyAttempt,
   claimSlackReplyPart,
   finishSlackReplyAttempt,
   getQueryCard,
@@ -105,8 +106,18 @@ const REFUSED_BLOCKS = new Set(["invalid_blocks", "invalid_blocks_format", "inva
 /** What a reply's parts are marked with in Slack (its message metadata): the run and the part, nothing said. */
 export const REPLY_EVENT = "opendash_reply";
 
-/** The mark a reply leaves when Slack refused its answer's card: the answer went without it, its charts as images. */
+/**
+ * The marks a reply leaves about its answer's card, each made before the send it's about: `card`, the answer was sent
+ * as a card (so its charts aren't sent again as images); `card_refused`, Slack refused it, and the answer goes, and
+ * goes again in any later attempt, without one (every chart an image). An answer with neither went as today's message.
+ */
+export const CARD_SENT = "card";
 export const CARD_REFUSED = "card_refused";
+
+/** The reply's own records failing while it sends the answer: never taken for Slack refusing it, so the job retries. */
+class ReplyLedgerError extends Error {
+  override name = "ReplyLedgerError";
+}
 
 const sleep = (ms: number, signal?: AbortSignal) =>
   new Promise<void>((resolve) => {
@@ -466,23 +477,41 @@ class Reply {
       { card: null, feedback: "native" },
       { card: null, feedback: "plain" },
     ];
+    const { orgId, runId } = this.job;
     for (let i = 0; ; i++) {
       const t = tries[i] as (typeof tries)[number];
+      // Marked before it's sent as a card; and before any second try, this attempt still the latest (a newer one may
+      // have posted the answer meanwhile).
+      if (t.card) await this.ledger(() => this.once(CARD_SENT, async () => null, false));
+      if (i > 0)
+        await this.ledger(() =>
+          this.deps.withTenant(orgId, (tx) => checkSlackReplyAttempt(tx, orgId, runId, this.attempt)),
+        );
       try {
-        return await send(replyBlocks(said, this.job.runId, t.feedback, this.remembered, dm), t.card);
+        return await send(replyBlocks(said, runId, t.feedback, this.remembered, dm), t.card);
       } catch (error) {
         const why = failureCode(error);
         const next = tries[i + 1];
         if (!REFUSED_BLOCKS.has(why) || !next) throw error;
         if (t.card && !next.card) {
-          // Marked before the answer goes without it, so no attempt leaves out the charts it would have drawn.
+          // Marked before the answer goes without it: no attempt sends it as a card again, and every chart is an image.
+          await this.ledger(() => this.once(CARD_REFUSED, async () => null, false));
           this.cardRefused = true;
-          await this.once(CARD_REFUSED, async () => null, false);
-          this.deps.log?.("slack reply: without its card", { runId: this.job.runId, why });
+          this.deps.log?.("slack reply: without its card", { runId, why });
         } else {
-          this.deps.log?.("slack reply: plain feedback buttons", { runId: this.job.runId, why });
+          this.deps.log?.("slack reply: plain feedback buttons", { runId, why });
         }
       }
+    }
+  }
+
+  /** A write to the reply's own records while the answer is sent: its failure is the job's to retry, never a refusal. */
+  private async ledger<T>(fn: () => Promise<T>): Promise<T> {
+    try {
+      return await fn();
+    } catch (error) {
+      if (error instanceof SlackReplyFenced) throw error;
+      throw new ReplyLedgerError(error instanceof Error ? error.message : String(error), { cause: error });
     }
   }
 
@@ -609,10 +638,14 @@ class Reply {
     const [lead, ...rest] = said.messages;
     const first = lead === undefined || !this.target.shared ? lead : addressed(this.target.slackUserId, lead);
     const lastPart = rest.length ? `answer:${rest.length + 1}` : "answer";
-    // An answer that's one message, as a card: its table and charts Slack's own (null: today's message).
-    const card = rest.length
+    // An answer that's one message, as a card: its table and charts Slack's own (null: today's message). Not once
+    // Slack refused it, in an earlier attempt too.
+    const begun = (part: string) =>
+      deps.withTenant(job.orgId, (tx) => slackReplyPartBegun(tx, job.orgId, job.runId, part));
+    const made = rest.length
       ? null
       : answerCard(run?.outcome, this.target.shared ? (md) => addressed(this.target.slackUserId, md) : undefined);
+    const card = made && !(await begun(CARD_REFUSED)) ? made : null;
     // The answer, all at once: in the message that showed its steps, or the plain way when that didn't take it. The
     // last of its messages carries what was checked and its buttons.
     await this.once("answer", async () => {
@@ -627,7 +660,9 @@ class Reply {
             }),
           card,
         ).catch((error: unknown) => {
+          // Slack not taking it is looked into below; the reply's own records failing is the job's to retry.
           if (error instanceof SlackReplyFenced) throw error;
+          if (error instanceof ReplyLedgerError) throw error.cause;
           return null;
         });
         if (at) return at;
@@ -644,23 +679,19 @@ class Reply {
       const part = `answer:${i + 2}`;
       await this.once(part, () => this.posted(part, markdown, said, part === lastPart));
     }
-    // Its charts, as images in the thread, each the page's own drawing with its values as alt text: those its card
-    // didn't draw, or all of them once Slack refused the card (in this attempt or an earlier one).
+    // Its charts, as images in the thread, each the page's own drawing with its values as alt text: those its card drew
+    // aren't sent again, when the answer went as a card (marked so) and Slack didn't refuse it. An answer with no mark
+    // (an attempt from before cards, say) has every chart as an image.
     const outcome = run?.outcome;
     if (outcome?.kind === "answer" && outcome.status === "answered" && outcome.charts?.length) {
-      const all = outcome.charts;
-      await (async () => {
-        const refused =
-          this.cardRefused ||
-          (card !== null &&
-            (await deps.withTenant(job.orgId, (tx) => slackReplyPartBegun(tx, job.orgId, job.runId, CARD_REFUSED))));
-        const drawn = new Set(card && !refused ? card.charts : []);
-        const images = all.filter((_, i) => !drawn.has(i));
-        if (images.length) await this.charts(images);
-      })().catch((error: unknown) => {
-        if (error instanceof SlackReplyFenced) throw error;
-        deps.log?.("slack reply: its charts weren't posted", { runId: job.runId, why: failureCode(error) });
-      });
+      const asCard = card !== null && !this.cardRefused && (await begun(CARD_SENT)) && !(await begun(CARD_REFUSED));
+      const drawn = new Set(asCard ? card.charts : []);
+      const images = outcome.charts.filter((_, i) => !drawn.has(i));
+      if (images.length)
+        await this.charts(images).catch((error: unknown) => {
+          if (error instanceof SlackReplyFenced) throw error;
+          deps.log?.("slack reply: its charts weren't posted", { runId: job.runId, why: failureCode(error) });
+        });
     }
     if (said.questions?.length) {
       const questions = said.questions;
