@@ -152,13 +152,18 @@ export function takeTable(source: string): TakenTable | null {
   let flat = true;
   // A link says where it goes only when its text is its address (a bare one, as GFM finds them).
   const bare = (t: string) => t.replace(/^(https?:\/\/|mailto:)/i, "").replace(/\/$/, "");
+  // A link whose target isn't followed (a relative one: its address could hold a value) says even less.
   const unsaid = (parts: Inline[]): boolean =>
     parts.some(
       (p) =>
         p.kind === "struck" ||
-        (p.kind === "link" && p.href !== null && bare(plainText(p.children).trim()) !== bare(p.href)) ||
+        (p.kind === "link" && (p.href === null || bare(plainText(p.children).trim()) !== bare(p.href))) ||
         ("children" in p && unsaid(p.children)),
     );
+  // What the parse turns into its text alone, losing where it points: an image, a reference to a link or a note.
+  const lost = (n: Nodes): boolean =>
+    ["image", "imageReference", "linkReference", "footnoteReference"].includes(n.type) ||
+    ("children" in n && (n.children as Nodes[]).some(lost));
   // The cell's pieces of text, a new one at every change of mark: where plain text would join two numbers.
   const pieces = (parts: Inline[], out: string[] = []): string[] => {
     for (const p of parts) {
@@ -170,19 +175,24 @@ export function takeTable(source: string): TakenTable | null {
   };
   const ends = new RegExp(`[\\p{N}${REF_CLOSE}]$`, "u");
   const starts = new RegExp(`^[\\p{N}${REF_OPEN}]`, "u");
+  // Also within one piece: a value right beside another, or beside digits.
+  const beside = new RegExp(`${REF_CLOSE}[\\p{N}${REF_OPEN}]|\\p{N}${REF_OPEN}`, "u");
   const joins = (parts: Inline[]) => {
     const ps = pieces(parts).filter((t) => t !== "");
-    return ps.some((t, i) => i > 0 && ends.test(ps[i - 1] ?? "") && starts.test(t));
+    return ps.some((t, i) => beside.test(t) || (i > 0 && ends.test(ps[i - 1] ?? "") && starts.test(t)));
   };
   const cell = (c: (typeof node.children)[number]["children"][number]) => {
     const parts = inlines(c.children);
-    if (unsaid(parts) || joins(parts)) flat = false;
+    if (unsaid(parts) || joins(parts) || c.children.some((n) => lost(n as Nodes))) flat = false;
     return plainText(parts).trim();
   };
   const [headRow, ...bodyRows] = node.children;
   const head = (headRow?.children ?? []).map(cell);
   const width = head.length;
   const row = (r: (typeof node.children)[number]) => {
+    // A row wider than its header was cut by a `|` the parse took for a column (a Slack link's, say): its last cells
+    // would be lost, so the table isn't flat.
+    if (r.children.length > width) flat = false;
     const cells = r.children.slice(0, width).map(cell);
     return [...cells, ...Array<string>(width - cells.length).fill("")];
   };

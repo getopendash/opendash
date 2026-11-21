@@ -5,7 +5,7 @@
 // would degrade means no card.
 import type { ResolvedChart, RunOutcome } from "@opendash/core";
 import { describe, expect, it } from "vitest";
-import { answerCard, nativeChart, shorten, TABLE_PAGE } from "../src/card";
+import { answerCard, hundredfold, nativeChart, shorten, TABLE_PAGE } from "../src/card";
 
 type Ref = { ref: string; display: string; kind: "text"; citations: [] };
 /** A reference as the gate leaves it in the segments: what it shows. */
@@ -131,6 +131,9 @@ describe("an answer's card", () => {
     expect(answerCard(answer(`See [the guide][g].\n\n${TABLE}\n\n[g]: https://docs.example/g`))).toBeNull();
     expect(answerCard(answer(TABLE, { caveats: ["See [g].\n\n[g]: https://docs.example/g"] }))).toBeNull();
     expect(answerCard(answer(["`\uE0000\uE001` ", ref("12"), `\n\n${TABLE}`]))).toBeNull();
+    // Written as entities, which the parse turns into a placeholder's characters.
+    expect(answerCard(answer(["&#xE000;0&#xE001; ", ref("12"), `\n\n${TABLE}`]))).toBeNull();
+    expect(answerCard(answer(["&#57344;0&#57345; ", ref("12"), `\n\n${TABLE}`]))).toBeNull();
   });
 
   it("keeps an indented block after the table indented", () => {
@@ -254,6 +257,10 @@ describe("a chart as Slack's own", () => {
     const [a, b] = (close?.chart as { series: { values: number[] }[] } | undefined)?.series[0]?.values ?? [];
     expect(a).toBeLessThan(12.35);
     expect(b).toBeGreaterThan(12.35);
+    const edge = nativeChart(chart({ axis: { percent: true, compact: false } }, [0.12349999999999997, 0.1235]));
+    const [x, y] = (edge?.chart as { series: { values: number[] }[] } | undefined)?.series[0]?.values ?? [];
+    expect(x).toBeLessThan(12.35);
+    expect(y).toBe(12.35);
     const cents = nativeChart(chart({ axis: { currency: "USD", compact: false } }, [1.005, 2]));
     expect(cents).toMatchObject({ chart: { series: [{ values: [1.005, 2] }] } });
   });
@@ -267,6 +274,11 @@ describe("a chart as Slack's own", () => {
     const cut = nativeChart(chart({ categories: ["Enterprise North America", "Enterprise South America"] }));
     expect(cut?.chart).toMatchObject({ categories: ["Enterprise North Am…", "Enterprise South Am…"] });
     expect(nativeChart(chart({ categories: ["Enterprise customers one", "Enterprise customers two"] }))).toBeNull();
+  });
+
+  it("moves a number's decimal point two places, so values that differ still differ", () => {
+    expect([0.07, 0.000001, 5, -0.5, 12.3456, 0.1235].map(hundredfold)).toEqual([7, 0.0001, 500, -50, 1234.56, 12.35]);
+    expect(hundredfold(1e-21)).toBeCloseTo(1e-19, 30);
   });
 
   it("cuts text never inside a character", () => {

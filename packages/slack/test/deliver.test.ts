@@ -568,6 +568,28 @@ describe("a run's reply in Slack", () => {
       expect(answers(q.runId)).toHaveLength(1);
     });
 
+    it("looks for the card in the thread, and sends no second answer, when Slack can't say whether it took it", async () => {
+      const q = await question();
+      await q.end(tabled(await cited(q.runId)));
+      fake.answer("chat.stopStream", (a) =>
+        /data_table/.test(JSON.stringify(a.blocks ?? "")) ? { ok: false, error: "internal_error" } : null,
+      );
+      const calls = from();
+      try {
+        expect(await deliverSlackReply(deps, bot, slack, q.job)).toBe("done");
+      } finally {
+        fake.answer("chat.stopStream", null);
+      }
+      // Not taken for a refusal: the thread is read first (here it isn't there), then it's posted, still as the card.
+      expect(calls().some((c) => c.method === "conversations.replies" && c.args.include_all_metadata)).toBe(true);
+      const [posted] = calls().filter((c) => c.method === "chat.postMessage" && c.args.metadata);
+      expect(JSON.stringify(posted?.args.blocks)).toContain('"data_table"');
+      const [mark] = await s.t.owner<{ part: string }[]>`
+        select part from app.slack_reply_message where run_id = ${q.runId} and part = 'card_refused'`;
+      expect(mark).toBeUndefined();
+      expect(answers(q.runId)).toHaveLength(1);
+    });
+
     it("says it as today's message when the card can't be made", async () => {
       const q = await question();
       // A chart of a shape the card doesn't expect (no series): the answer still goes.

@@ -156,6 +156,12 @@ describe("an answer's first table, taken out", () => {
     // Two marked numbers side by side would read as one; a number beside words reads as it does.
     expect(takeTable(`| A |\n|---|\n| **${ref(0)}**_${ref(1)}_ |`)?.flat).toBe(false);
     expect(takeTable("| A |\n|---|\n| **12** plans |")?.flat).toBe(true);
+    // A value right beside another, even unmarked; a relative link or an image (their address dropped); a row wider
+    // than its header (a Slack link's `|` taken for a column, its last cell lost).
+    expect(takeTable(`| A |\n|---|\n| ${ref(0)}${ref(1)} |`)?.flat).toBe(false);
+    expect(takeTable("| A |\n|---|\n| [details](/orders/12) |")?.flat).toBe(false);
+    expect(takeTable("| A |\n|---|\n| ![chart](https://x.example/12.png) |")?.flat).toBe(false);
+    expect(takeTable("| Plan | N |\n|---|---|\n| <https://x.example/p|Growth> | 12 |")?.flat).toBe(false);
   });
 
   it("knows when a text defines a link reference another part of it may use", () => {

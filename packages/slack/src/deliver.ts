@@ -100,6 +100,13 @@ export class SlackReplyUnlinked extends Error {
 /** Slack's refusals that no retry changes (the token gone, or the place to reply): the reply ends there. */
 const FOR_GOOD = SLACK_FOR_GOOD;
 
+/**
+ * Slack's answers that don't say the message wasn't taken (it may have been, before the error) or say to wait: never
+ * a reason to send it again another way. The stream's end is looked for in the thread first; a post is the job's to
+ * retry, which looks first too.
+ */
+const UNSURE = new Set(["internal_error", "fatal_error", "service_unavailable", "request_timeout", "ratelimited"]);
+
 /** Slack refusing a message's blocks: tried again with the plain ones. */
 const REFUSED_BLOCKS = new Set(["invalid_blocks", "invalid_blocks_format", "invalid_arguments"]);
 
@@ -495,7 +502,7 @@ class Reply {
         // A card Slack says no to, for any reason but one that ends the reply or a rate limit: the answer goes without
         // it, whatever Slack's words for the refusal (only these three say it's the blocks, maybe only the buttons).
         const refusal = slackRefusal(error);
-        const cardNo = t.card !== null && refusal !== null && !FOR_GOOD.has(refusal) && refusal !== "ratelimited";
+        const cardNo = t.card !== null && refusal !== null && !FOR_GOOD.has(refusal) && !UNSURE.has(refusal);
         if (!next || !(REFUSED_BLOCKS.has(why) || cardNo)) throw error;
         const plain = tries.findIndex((x) => x.card === null);
         if (t.card && (!next.card || !REFUSED_BLOCKS.has(why))) {

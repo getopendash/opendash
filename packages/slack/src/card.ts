@@ -67,6 +67,20 @@ export function shorten(text: string, max: number): string {
   return `${out.trimEnd()}…`;
 }
 
+/**
+ * A number a hundred times over, by moving its decimal point (0.07 → 7, where × 100 gives 7.000000000000001), so two
+ * values that differ still differ. A number written with an exponent is multiplied.
+ */
+export function hundredfold(v: number): number {
+  const text = String(v);
+  const m = /^(-?)(\d+)(?:\.(\d+))?$/.exec(text);
+  if (!m) return v * 100;
+  const [, sign, whole, fraction = ""] = m;
+  const digits = `${whole}${fraction.padEnd(2, "0")}`;
+  const point = (whole ?? "").length + 2;
+  return Number(`${sign}${digits.slice(0, point)}.${digits.slice(point) || "0"}`);
+}
+
 /** Labels cut to Slack's length, or null when cutting makes two of them the same (a chart Slack can't tell apart). */
 const labels = (names: string[]): string[] | null => {
   const cut = names.map((n) => shorten(n, SLACK.chartLabel));
@@ -90,9 +104,8 @@ export function nativeChart(chart: ResolvedChart): Record<string, unknown> | nul
   const names = labels(series.map((s) => s.name));
   const title = shorten(chart.title, SLACK.chartTitle);
   if (!cats || !names || !title) return null;
-  // The value itself, never rounded (a tiny share stays above zero); a percentage in the units its labels use, without
-  // the float noise of the scaling (0.07 × 100 is 7.000000000000001).
-  const value = (v: number) => (axis.percent ? Number((v * 100).toPrecision(15)) : v);
+  // The value itself, never rounded (a tiny share stays above zero); a percentage in the units its labels use.
+  const value = (v: number) => (axis.percent ? hundredfold(v) : v);
   const values = series.map((s) => s.points.map((p) => value(p?.value ?? 0)));
   if (values.some((vs) => vs.some((v) => !Number.isFinite(v)))) return null;
   const yLabel = axis.percent ? "%" : axis.currency ? axis.currency : undefined;
@@ -143,8 +156,15 @@ export function answerCard(
   // An older answer has no segments to read its table from safely: today's message.
   if (!answer.segments) return null;
   const segments = answer.segments.markdown;
-  // Text that holds a placeholder's own characters could take a value that isn't its own: today's message.
-  if (segments.some((s) => !("ref" in s) && (s.text.includes(REF_OPEN) || s.text.includes(REF_CLOSE)))) return null;
+  // Text that holds a placeholder's own characters, or an entity the parse turns into one, could take a value that
+  // isn't its own: today's message.
+  const marker = /&#(?:x0*e00[01]|0*5734[45]);/i;
+  if (
+    segments.some(
+      (s) => !("ref" in s) && (s.text.includes(REF_OPEN) || s.text.includes(REF_CLOSE) || marker.test(s.text)),
+    )
+  )
+    return null;
   // The table is read from the answer as written, each value a placeholder, so nothing in a value or a link can move
   // a cell; the values go back in after the parse.
   const { source, fill } = withPlaceholders(segments);
