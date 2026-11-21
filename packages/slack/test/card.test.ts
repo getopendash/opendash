@@ -243,8 +243,8 @@ describe("a chart as Slack's own", () => {
     expect(usd).toMatchObject({ chart: { yLabel: "USD", series: [{ values: [1234.567, 99] }] } });
   });
 
-  it("leaves a chart drawn on its side as its image", () => {
-    expect(nativeChart(chart({ horizontal: true }))).toBeNull();
+  it("stands a chart drawn on its side up, its bars and values the same", () => {
+    expect(nativeChart(chart({ horizontal: true }))).toEqual(nativeChart(chart()));
   });
 
   it("never rounds a value away: a tiny share stays above zero, a cent boundary as it is", () => {

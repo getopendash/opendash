@@ -549,6 +549,45 @@ describe("a run's reply in Slack", () => {
       });
     }
 
+    it("says it as today's message whatever Slack's words for refusing the card", async () => {
+      const q = await question();
+      await q.end(tabled(await cited(q.runId)));
+      fake.answer("chat.stopStream", (a) =>
+        /data_table/.test(JSON.stringify(a.blocks ?? "")) ? { ok: false, error: "unknown_block_type" } : null,
+      );
+      const calls = from();
+      try {
+        expect(await deliverSlackReply(deps, bot, slack, q.job)).toBe("done");
+      } finally {
+        fake.answer("chat.stopStream", null);
+      }
+      // Not the buttons' fault, so straight to today's message: one try with the card, one without.
+      const stops = calls().filter((c) => c.method === "chat.stopStream" && c.args.metadata);
+      expect(stops.map((c) => typeof c.args.markdown_text)).toEqual(["undefined", "string"]);
+      expect(pngs(calls)).toEqual(["Accounts by plan", "Accounts with a gap"]);
+      expect(answers(q.runId)).toHaveLength(1);
+    });
+
+    it("says it as today's message when the card can't be made", async () => {
+      const q = await question();
+      // A chart of a shape the card doesn't expect (no series): the answer still goes.
+      await q.end(
+        answer("There are **2** plans.", {
+          citations: [{ queryRunId: await cited(q.runId) }],
+          charts: [{ type: "bar", title: "Odd", categories: ["Growth"] }],
+        }),
+      );
+      const said: unknown[][] = [];
+      const calls = from();
+      expect(
+        await deliverSlackReply({ ...deps, log: (msg, fields) => void said.push([msg, fields]) }, bot, slack, q.job),
+      ).toBe("done");
+      const [stop] = calls().filter((c) => c.method === "chat.stopStream" && c.args.metadata);
+      expect(stop?.args.markdown_text).toBe("There are **2** plans.");
+      expect(said).toContainEqual(["slack reply: no card", { runId: q.runId, why: "TypeError" }]);
+      expect(answers(q.runId)).toHaveLength(1);
+    });
+
     it("posts nothing when a newer attempt took the reply over while this one was falling back", async () => {
       const q = await question();
       await q.end(tabled(await cited(q.runId)));

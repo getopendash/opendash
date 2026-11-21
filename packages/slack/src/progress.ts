@@ -50,6 +50,16 @@ const slackCodeOf = (error: unknown): string | null => {
   return typeof code === "string" && code ? code : null;
 };
 
+/**
+ * Slack's own answer refusing a call (`ok: false` and its reason), also when the adapter wrapped it; null for anything
+ * else (no answer came back, a rate limit the client gave up on): then what was sent may still have landed.
+ */
+export const slackRefusal = (error: unknown): string | null => {
+  const of = (e: unknown) => (e as { data?: { ok?: unknown; error?: unknown } } | null)?.data;
+  const data = of(error) ?? of((error as { cause?: unknown } | null)?.cause);
+  return data?.ok === false && typeof data.error === "string" && data.error ? data.error : null;
+};
+
 /** Slack's reason for refusing a call, for the log: its error code, or the error's message. */
 export const slackError = (error: unknown): string =>
   slackCodeOf(error) ?? String(error instanceof Error ? error.message : error);

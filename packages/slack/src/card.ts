@@ -81,8 +81,8 @@ const labels = (names: string[]): string[] | null => {
  */
 export function nativeChart(chart: ResolvedChart): Record<string, unknown> | null {
   const { categories, series, axis } = chart;
-  // Slack's bars stand up: a chart drawn on its side stays the image that draws it so.
-  if (chart.horizontal) return null;
+  // Slack's bars stand up: a chart the page draws on its side (a ranking, usually) stands up too. Its bars and values are
+  // the same; only which way they point differs.
   if (!categories.length || categories.length > SLACK.chartPoints) return null;
   if (!series.length || series.length > SLACK.chartSeries) return null;
   if (series.some((s) => s.points.length !== categories.length || s.points.some((p) => p === null))) return null;

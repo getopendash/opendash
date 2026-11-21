@@ -47,7 +47,7 @@ import type { Chat } from "chat";
 import { askBlocks, buttonText, spelledOut } from "./ask";
 import { optionAction } from "./bot";
 import { type AnswerCard, answerCard } from "./card";
-import { cardsAfter, failureCode, READING, type StreamClient, slackError, taskCards } from "./progress";
+import { cardsAfter, failureCode, READING, type StreamClient, slackError, slackRefusal, taskCards } from "./progress";
 import {
   cardCsv,
   chartAltText,
@@ -492,12 +492,18 @@ class Reply {
       } catch (error) {
         const why = failureCode(error);
         const next = tries[i + 1];
-        if (!REFUSED_BLOCKS.has(why) || !next) throw error;
-        if (t.card && !next.card) {
+        // A card Slack says no to, for any reason but one that ends the reply or a rate limit: the answer goes without
+        // it, whatever Slack's words for the refusal (only these three say it's the blocks, maybe only the buttons).
+        const refusal = slackRefusal(error);
+        const cardNo = t.card !== null && refusal !== null && !FOR_GOOD.has(refusal) && refusal !== "ratelimited";
+        if (!next || !(REFUSED_BLOCKS.has(why) || cardNo)) throw error;
+        const plain = tries.findIndex((x) => x.card === null);
+        if (t.card && (!next.card || !REFUSED_BLOCKS.has(why))) {
           // Marked before the answer goes without it: no attempt sends it as a card again, and every chart is an image.
           await this.ledger(() => this.once(CARD_REFUSED, async () => null, false));
           this.cardRefused = true;
           this.deps.log?.("slack reply: without its card", { runId, why });
+          i = plain - 1;
         } else {
           this.deps.log?.("slack reply: plain feedback buttons", { runId, why });
         }
@@ -642,9 +648,18 @@ class Reply {
     // Slack refused it, in an earlier attempt too.
     const begun = (part: string) =>
       deps.withTenant(job.orgId, (tx) => slackReplyPartBegun(tx, job.orgId, job.runId, part));
-    const made = rest.length
-      ? null
-      : answerCard(run?.outcome, this.target.shared ? (md) => addressed(this.target.slackUserId, md) : undefined);
+    let made: AnswerCard | null = null;
+    if (!rest.length) {
+      try {
+        made = answerCard(
+          run?.outcome,
+          this.target.shared ? (md) => addressed(this.target.slackUserId, md) : undefined,
+        );
+      } catch (error) {
+        // A card is never worth the answer: one that can't be made is today's message.
+        deps.log?.("slack reply: no card", { runId: job.runId, why: failureCode(error) });
+      }
+    }
     const card = made && !(await begun(CARD_REFUSED)) ? made : null;
     // The answer, all at once: in the message that showed its steps, or the plain way when that didn't take it. The
     // last of its messages carries what was checked and its buttons.
