@@ -63,7 +63,9 @@ describe("an answer's headline figures, said in full", () => {
         trend: { label: "By month", points: [point("-$100", -100, 0), point("-$50", -50, 1), point("-$10", -10, 2)] },
       },
     ]);
-    expect(html).toContain("By month: -$100 · -$50 · -$10");
+    for (const part of ["By month:", "-$100", "-$50", "-$10"]) expect(html).toContain(part);
+    // Each point a traced number, as the card's value is.
+    expect(html.match(/traced-number/g)?.length).toBeGreaterThanOrEqual(4);
     expect(html).not.toContain("sparkline");
   });
 

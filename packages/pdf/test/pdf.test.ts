@@ -94,6 +94,33 @@ describe("an answer's PDF", () => {
     expect(trace.rows.at(-1)?.cell).toBe("rows 1, 2 · churned_mrr");
   });
 
+  it("names each cell of a number computed from several queries with its own query", () => {
+    const at = { organization: "Acme", answeredAt: "2026-10-11T09:00:00Z", question: "Why?", note: "n" };
+    const names2 = new Map([
+      ["qr1", { alias: "q1", title: "Orders" }],
+      ["qr3", { alias: "q3", title: "Orders before" }],
+    ]);
+    const blocks = answerBlocks(
+      answer([
+        {
+          ref: "pct(q1:0:orders,q3:0:before)",
+          display: "-20%",
+          kind: "number",
+          citations: [
+            { alias: "q1", queryRunId: "qr1", row: 0, column: "orders" },
+            { alias: "q3", queryRunId: "qr3", row: 0, column: "before" },
+          ],
+        },
+      ]),
+      { ...at, names: names2 },
+    );
+    const trace = blocks.at(-1) as { rows: { query: string; cell: string }[] };
+    expect(trace.rows[0]).toMatchObject({
+      query: "q1 · Orders; q3 · Orders before",
+      cell: "q1 row 1 · orders; q3 row 1 · before",
+    });
+  });
+
   it("draws a markdown table and list as a table and a list, not a line of pipes", () => {
     const r = (text: string, style = "regular") => ({ text, style });
     expect(

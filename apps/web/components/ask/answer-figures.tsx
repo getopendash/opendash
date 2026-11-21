@@ -101,8 +101,25 @@ export function AnswerFigures({
                 ) : null}
                 {/* Bars for a trend of amounts; one that goes below zero is said in numbers (bars start at zero). */}
                 {f.trend && f.trend.points.length > 1 && f.trend.points.some((p) => p.value < 0) ? (
-                  <span className="mt-1 text-small text-muted-tertiary">
-                    {`${f.trend.label ?? "Trend"}: ${f.trend.points.map((p) => p.display).join(" · ")}`}
+                  <span className="mt-1 flex flex-wrap items-baseline gap-1 text-small text-muted-tertiary">
+                    <span>{`${f.trend.label ?? "Trend"}:`}</span>
+                    {/* Each point a traced number, marked as the card's when the answer is unverified. */}
+                    <AnswerText
+                      segments={f.trend.points.flatMap((p, k) => [
+                        ...(k ? [{ text: " · " }] : []),
+                        {
+                          ref: `${p.cell.alias}:${p.cell.row}:${p.cell.column}`,
+                          display: p.display,
+                          kind: "number" as const,
+                          citations: [p.cell],
+                        },
+                      ])}
+                      scope={`figure-${at}-trend`}
+                      className="text-small"
+                      selected={inspected}
+                      unverified={unverified}
+                      onTrace={onTrace}
+                    />
                   </span>
                 ) : f.trend && f.trend.points.length > 1 ? (
                   <div className="mt-1 flex items-end justify-between gap-2">

@@ -580,15 +580,22 @@ export function cardCsv(card: Pick<QueryCard, "title" | "alias" | "columns" | "p
 
 /**
  * What a notification and a screen reader say of an answer's message (its text beside its blocks): its heading, its
- * figures as lines, then its first words; whole lines only, within Slack's room for it.
+ * figures as lines, then its words, quieted; the heading and figures take at most two thirds of the room, the words
+ * the rest, each cut only between words.
  */
 export function noticeText(said: Pick<ReplyText, "title" | "figures">, markdown: string, room = 3_000): string {
-  const lines = [said.title ?? "", ...figureLines(said.figures), markdown].filter((l) => l.trim());
-  let out = "";
-  for (const line of lines) {
-    const next = out ? `${out}\n${line}` : line;
-    if (next.length > room) return out || line.slice(0, room);
-    out = next;
+  const upTo = (text: string, n: number) => {
+    if (text.length <= n) return text;
+    const cut = text.slice(0, n);
+    const at = cut.lastIndexOf(" ");
+    return `${(at > n / 2 ? cut.slice(0, at) : cut).trimEnd()}…`;
+  };
+  let head = "";
+  for (const line of [said.title ?? "", ...figureLines(said.figures)].filter((l) => l.trim())) {
+    const next = head ? `${head}\n${line}` : line;
+    if (next.length > (room * 2) / 3) break;
+    head = next;
   }
-  return out;
+  const words = markdown.trim() ? upTo(markdown.trim(), room - head.length - 1) : "";
+  return quiet([head, words].filter(Boolean).join("\n"));
 }

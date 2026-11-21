@@ -778,7 +778,8 @@ describe("an answer's headline figures", () => {
             vs: "vs August",
             detail: "Starter lost ⟦q3:0:churned_mrr|currency:USD,compact⟧",
             group: "Revenue",
-            trend: { query: "q1", column: "mrr", label: "By month" },
+            trend: true,
+            trend_label: "By month",
           },
         ],
       }),
@@ -799,12 +800,12 @@ describe("an answer's headline figures", () => {
     expect(f?.change?.segments[0]).toMatchObject({ display: "+4.2%", kind: "number" });
     expect(f?.detail?.map((s) => ("ref" in s ? s.display : s.text)).join("")).toBe("Starter lost $4.1k");
     expect(f).toMatchObject({ label: "MRR", vs: "vs August", group: "Revenue" });
-    // Its trend: the column's cells in the query's order, shown short, each traced.
-    expect(f?.trend).toMatchObject({
+    // Its trend: the value's own column in time order (the query lists September first), ending at the value.
+    expect(f?.trend).toEqual({
       label: "By month",
       points: [
-        { value: 412600, display: "$412.6k", cell: { alias: "q1", row: 0, column: "mrr" } },
-        { value: 395969.29, display: "$396k", cell: { alias: "q1", row: 1, column: "mrr" } },
+        { value: 395969.29, display: "$396k", cell: { alias: "q1", queryRunId: "run-1", row: 1, column: "mrr" } },
+        { value: 412600, display: "$412.6k", cell: { alias: "q1", queryRunId: "run-1", row: 0, column: "mrr" } },
       ],
     });
   });
@@ -819,7 +820,7 @@ describe("an answer's headline figures", () => {
           { label: "Churn", value: "⟦q3:0:churned_mrr⟧", detail: "down from 5,000" },
           { label: "MRR over 400k", value: "⟦q2:0:mrr⟧" },
           { label: "Growth", value: "⟦q3:0:churned_mrr⟧" },
-          { label: "MRR", value: "⟦q1:0:mrr⟧", trend: { query: "q1", column: "plan" } },
+          { label: "Churn", value: "⟦q3:0:churned_mrr⟧", trend: true },
         ],
       }),
       ctx,
@@ -830,7 +831,7 @@ describe("an answer's headline figures", () => {
     expect(said).toContain('Figure "Churn": its change is one reference');
     expect(said).toContain('Figure "Churn": numbers must be references');
     expect(said).toContain('"MRR over 400k" states a figure');
-    expect(said).toContain("isn't a column here");
+    expect(said).toContain("a trend needs q3 to have a date column");
     // "Growth" names q3's row 1, but the value is row 0's (Starter's).
     expect(said).toMatch(/Growth/);
     // Only the first figure passed every check.
@@ -843,14 +844,13 @@ describe("an answer's headline figures", () => {
     expect(gate.checked.numbers).toBe(1);
   });
 
-  it("are at most nine, in three groups at most; a heading states no figure", () => {
+  it("are at most nine, in three groups as they're drawn (the ungrouped ones a group too); a heading states no figure", () => {
     const many = Array.from({ length: 10 }, () => mrr);
     expect(checkAnswer(answer("MRR.", { figures: many }), ctx).problems).toContain("At most 9 figures.");
-    const groups = ["A", "B", "C", "D"].map((group) => ({ ...mrr, group }));
-    const fourGroups = checkAnswer(answer("MRR.", { figures: groups }), ctx);
-    expect(fourGroups.problems.join("\n")).toContain('Figure "MRR": at most 3 groups of figures.');
-    // The figure that would make a fourth group is the one left out.
-    expect(fourGroups.figures.map((f) => f.group)).toEqual(["A", "B", "C"]);
+    const groups = [undefined, "A", "B", "C"].map((group) => ({ ...mrr, ...(group ? { group } : {}) }));
+    const four = checkAnswer(answer("MRR.", { figures: groups }), ctx);
+    expect(four.problems).toContain("At most 3 groups of figures.");
+    expect(four.figures.map((f) => f.group ?? null)).toEqual([null, "A", "B"]);
     const loud = checkAnswer(answer("MRR.", { title: "MRR passed 400k" }), ctx);
     expect(loud.title).toBeNull();
     expect(loud.problems.join("\n")).toContain('"MRR passed 400k" states a figure');
@@ -858,10 +858,10 @@ describe("an answer's headline figures", () => {
 });
 
 describe("an answer's headline figures, held to the answer's checks", () => {
-  // Orders this month and last from a verified metric (q1); revenue, a text column of codes and a flag from own SQL (q2),
-  // by plan, Starter then Growth.
+  // Orders this month and last from a verified metric (q1); by plan from own SQL (q2), Starter then Growth, with a code
+  // as text, a flag and returns; an independent count (q3); orders by day from own SQL (q4), newest first.
   const shop: GateContext = {
-    question: "How are orders and revenue doing?",
+    question: "How did orders change in the last 7 days?",
     rowsShown: 50,
     results: [
       {
@@ -882,18 +882,27 @@ describe("an answer's headline figures, held to the answer's checks", () => {
           { name: "orders", type: "number" },
           { name: "code", type: "text" },
           { name: "active", type: "boolean" },
-          { name: "share", type: "number" },
+          { name: "returns", type: "number" },
+          { name: "orders_before", type: "number" },
         ],
         rows: [
-          ["Starter", 40, "123", 1, 0.8],
-          ["Growth", 70, "456", 0, 0.7],
+          ["Starter", 40, "123", 1, 4, 50],
+          ["Growth", 70, "456", 0, 9, 60],
         ],
       },
+      { alias: "q3", queryRunId: "run-3", columns: [{ name: "orders", type: "number" }], rows: [[45]] },
       {
-        alias: "q3",
-        queryRunId: "run-3",
-        columns: [{ name: "orders", type: "number" }],
-        rows: [[45]],
+        alias: "q4",
+        queryRunId: "run-4",
+        columns: [
+          { name: "day", type: "date" },
+          { name: "orders", type: "number" },
+        ],
+        rows: [
+          ["2026-11-03", 12],
+          ["2026-11-02", 8],
+          ["2026-11-01", 10],
+        ],
       },
     ],
   };
@@ -910,31 +919,49 @@ describe("an answer's headline figures, held to the answer's checks", () => {
       shop,
     );
   const said = (g: ReturnType<typeof ask>) => g.problems.join("\n");
+  const shown = (g: ReturnType<typeof ask>) => g.figures.length;
 
-  it("counts a trend's cells as numbers shown: from own SQL, they need their cross-check", () => {
-    const g = ask([{ label: "Orders", value: "⟦q1:0:now⟧", trend: { query: "q2", column: "orders" } }]);
-    // The text's number, the figure's, and its trend's two.
-    expect(g.checked.numbers).toBe(4);
-    expect(said(g)).toContain("Add a cross-check");
+  it("draws a trend from its value's own column, in time order, only when the value is the latest", () => {
+    const g = ask([{ label: "Orders a day", value: "⟦q4:0:orders⟧", trend: true }], {
+      cross_checks: [{ headline: "q4:0:orders", check: "q3:0:orders", differs_because: "two definitions" }],
+    });
+    expect(g.figures[0]?.trend?.points.map((p) => [p.cell.row, p.value])).toEqual([
+      [2, 10],
+      [1, 8],
+      [0, 12],
+    ]);
+    expect(said(ask([{ label: "Orders a day", value: "⟦q4:1:orders⟧", trend: true }]))).toContain("isn't the latest");
   });
 
-  it("takes a cross-check only of a number from own SQL when own SQL is why it's needed", () => {
-    // Own SQL's Growth orders shown, and the cross-check checks the metric's number instead.
-    const g = ask([{ label: "Growth", value: "⟦q2:1:orders⟧" }], {
-      cross_checks: [{ headline: "q1:0:now", check: "q3:0:orders" }],
+  it("never lets a trend's cells stand in for the headline a raw-SQL answer must cross-check", () => {
+    const g = ask([{ label: "Orders a day", value: "⟦q4:0:orders⟧", trend: true }], {
+      cross_checks: [{ headline: "q4:2:orders", check: "q3:0:orders", differs_because: "two definitions" }],
     });
     expect(said(g)).toContain("a cell from your own SQL");
   });
 
-  it("shows a measure as a figure's value, never a name or a code, and trends only a numeric column", () => {
-    expect(said(ask([{ label: "Code", value: "⟦q2:0:code⟧" }]))).toContain("its value is a measure");
-    expect(said(ask([{ label: "Orders", value: "⟦q1:0:now⟧", trend: { query: "q2", column: "active" } }]))).toContain(
-      "needs a numeric column",
-    );
+  it("takes a raw-SQL cross-check on either side of the pair, as before figures", () => {
+    const g = ask([{ label: "Growth", value: "⟦q2:1:orders⟧" }], {
+      cross_checks: [{ headline: "q3:0:orders", check: "q2:1:orders", differs_because: "two definitions" }],
+    });
+    expect(said(g)).not.toContain("a cell from your own SQL");
+    expect(
+      ask([{ label: "Growth", value: "⟦q2:1:orders⟧" }], {
+        cross_checks: [{ headline: "q1:0:now", check: "q3:0:orders" }],
+      }).problems.join("\n"),
+    ).toContain("a cell from your own SQL");
   });
 
-  it("keeps a figure's words and the title to words: no figure, no reference, no marks", () => {
+  it("shows a measure from a numeric column as a figure's value, never a name, a code or a flag", () => {
+    expect(said(ask([{ label: "Code", value: "⟦q2:0:code⟧" }]))).toContain("its value is a measure");
+    expect(said(ask([{ label: "Active", value: "⟦q2:0:active⟧" }]))).toContain("its value is a measure");
+  });
+
+  it("keeps a figure's words and the title to words: dates only, no figure, no reference, no marks", () => {
     expect(said(ask([], { title: "9 orders shipped" }))).toContain('"9 orders shipped" states a figure');
+    // A number the question has, in another sense, isn't a heading's to state either.
+    expect(said(ask([], { title: "Orders rose 7%" }))).toContain("states a figure");
+    expect(said(ask([], { title: "Forty orders shipped" }))).toContain("states a figure");
     expect(said(ask([{ label: "Orders", value: "⟦q1:0:now⟧", vs: "vs 8 orders" }]))).toContain("states a figure");
     expect(said(ask([{ label: "Orders: 42", value: "⟦q1:0:now⟧" }]))).toContain("states a figure");
     expect(said(ask([{ label: "Orders ⟦q1:0:now⟧", value: "⟦q1:0:now⟧" }]))).toContain("plain words");
@@ -942,58 +969,111 @@ describe("an answer's headline figures, held to the answer's checks", () => {
     expect(said(ask([{ label: "Orders", value: "⟦q1:0:now⟧", detail: "~⟦q1:0:before⟧~ before" }]))).toContain(
       "without formatting marks",
     );
-    // A month and a year are fine in a title.
-    expect(ask([], { title: "October 2026 against September 2026" }).title).toBe("October 2026 against September 2026");
+    for (const dated of ["October 2026 against September 2026", "Week 45, Nov 2 to Nov 8", "Q3 and H2"]) {
+      expect(ask([], { title: dated }).title).toBe(dated);
+    }
   });
 
-  it("names only the row a number is from, in a label, a group or a line more", () => {
+  it("names only the row its numbers are from, in a label, a group, a line more, computed ones too", () => {
     expect(said(ask([{ label: "Growth", value: "⟦q2:0:orders⟧" }]))).toMatch(/Growth/);
-    expect(ask([{ label: "Orders", group: "Growth", value: "⟦q2:0:orders⟧" }]).figures).toEqual([]);
-    expect(ask([{ label: "Orders", value: "⟦q1:0:now⟧", detail: "Growth had ⟦q2:0:orders⟧" }]).figures).toEqual([]);
-    expect(ask([{ label: "Growth", value: "⟦q2:1:orders⟧" }]).figures).toHaveLength(1);
+    expect(shown(ask([{ label: "Orders", group: "Growth", value: "⟦q2:0:orders⟧" }]))).toBe(0);
+    // A Starter card's line more is about Starter.
+    expect(shown(ask([{ label: "Starter", value: "⟦q2:0:orders⟧", detail: "⟦q2:1:returns⟧ returns" }]))).toBe(0);
+    expect(shown(ask([{ label: "Growth", value: "⟦share(q2:0:returns,q2:0:orders)⟧" }]))).toBe(0);
+    expect(shown(ask([{ label: "Growth", value: "⟦q2:1:orders⟧", detail: "⟦q2:1:returns⟧ returns" }]))).toBe(1);
   });
 
-  it("takes a change only as pct() or delta() of its value's own cell, so the arrow is right", () => {
+  it("keeps each number in a line more on its own: no unit, digit or reference beside it", () => {
+    expect(said(ask([{ label: "Orders", value: "⟦q1:0:now⟧", detail: "⟦q1:0:before⟧k before" }]))).toContain(
+      "stands alone",
+    );
+    expect(said(ask([{ label: "Orders", value: "⟦q1:0:now⟧", detail: "⟦q1:0:now⟧⟦q1:0:before⟧ shipped" }]))).toContain(
+      "stands alone",
+    );
+  });
+
+  it("takes a change only as pct() or delta() of its value's cell against the same measure, so the arrow is right", () => {
     expect(said(ask([{ label: "Orders", value: "⟦q1:0:now⟧", change: "⟦ratio(q1:0:now,q1:0:before)⟧" }]))).toContain(
       "pct() or delta()",
     );
     expect(said(ask([{ label: "Orders", value: "⟦q1:0:now⟧", change: "⟦pct(q2:1:orders,q1:0:before)⟧" }]))).toContain(
       "not its value's cell q1:0:now",
     );
-    const down = ask([{ label: "Orders", value: "⟦q1:0:now⟧", change: "⟦pct(q1:0:now,q1:0:before)⟧" }]);
-    expect(down.figures[0]?.change?.direction).toBe("down");
+    // Starter's orders against Growth's returns: another measure.
+    expect(
+      said(ask([{ label: "Starter", value: "⟦q2:0:orders⟧", change: "⟦pct(q2:0:orders,q2:1:returns)⟧" }])),
+    ).toContain("another measure");
+    // A computed value has no change of its own.
+    expect(
+      said(
+        ask([
+          {
+            label: "Returns share",
+            value: "⟦share(q2:0:returns,q2:0:orders)⟧",
+            change: "⟦pct(q2:0:returns,q2:0:orders)⟧",
+          },
+        ]),
+      ),
+    ).toContain("a value that's one cell");
+    // The same row's column before, or the same column's row before, are the same measure.
+    expect(
+      ask([{ label: "Orders", value: "⟦q1:0:now⟧", change: "⟦pct(q1:0:now,q1:0:before)⟧" }]).figures[0]?.change
+        ?.direction,
+    ).toBe("down");
+    expect(
+      ask([{ label: "Starter", value: "⟦q2:0:orders⟧", change: "⟦pct(q2:0:orders,q2:0:orders_before)⟧" }], {
+        cross_checks: [{ headline: "q2:0:orders", check: "q3:0:orders", differs_because: "two definitions" }],
+      }).figures,
+    ).toHaveLength(1);
   });
 
-  it("leaves out a figure whose own cross-check disagrees", () => {
-    const g = ask([{ label: "Starter", value: "⟦q2:0:orders⟧" }], {
+  it("refuses a percent shown as currency, and a number too large to show", () => {
+    expect(said(ask([{ label: "Returns", value: "⟦share(q2:0:returns,q2:0:orders)|currency:USD⟧" }]))).toContain(
+      "never a currency",
+    );
+    const tiny: GateContext = {
+      ...shop,
+      results: [
+        {
+          alias: "q1",
+          queryRunId: "r",
+          columns: [
+            { name: "a", type: "number" },
+            { name: "b", type: "number" },
+          ],
+          rows: [[1, 1e-320]],
+        },
+      ],
+    };
+    expect(
+      checkAnswer(
+        { status: "answered", markdown: "⟦pct(q1:0:a,q1:0:b)⟧", interpretation: [], caveats: [] },
+        tiny,
+      ).problems.join("\n"),
+    ).toMatch(/divides by zero|too large/);
+  });
+
+  it("leaves out a figure when a cross-check disagrees with any number it shows, its trend's too", () => {
+    const own = ask([{ label: "Starter", value: "⟦q2:0:orders⟧" }], {
       cross_checks: [{ headline: "q2:0:orders", check: "q3:0:orders" }],
     });
-    expect(said(g)).toContain("Cross-check disagrees");
-    expect(g.figures).toEqual([]);
+    expect(said(own)).toContain("Cross-check disagrees");
+    expect(own.figures).toEqual([]);
+    const byTrend = ask([{ label: "Orders a day", value: "⟦q4:0:orders⟧", trend: true }], {
+      cross_checks: [
+        { headline: "q4:0:orders", check: "q3:0:orders", differs_because: "two definitions" },
+        { headline: "q4:2:orders", check: "q3:0:orders" },
+      ],
+    });
+    expect(byTrend.figures).toEqual([]);
   });
 
   it("lets a figure that isn't shown change nothing about the answer: its count, its checks, its verification", () => {
-    const g = ask([{ label: "Orders", value: "⟦q2:0:orders⟧", trend: { query: "q2", column: "missing" } }]);
+    const g = ask([{ label: "Orders", value: "⟦q2:0:orders⟧", trend: true }]);
     expect(g.figures).toEqual([]);
     expect(g.verified).toBe(true);
     expect(g.checked.numbers).toBe(1);
     expect(said(g)).not.toContain("Add a cross-check");
-    expect(said(g)).toContain("isn't a column here");
-  });
-
-  it("shows a trend as its value shows: a share's in percent", () => {
-    const g = ask(
-      [
-        {
-          label: "Starter's share",
-          value: "⟦share(q2:0:orders,q1:0:before)⟧",
-          trend: { query: "q2", column: "share" },
-        },
-      ],
-      {
-        cross_checks: [{ headline: "q2:0:orders", check: "q3:0:orders", differs_because: "two definitions" }],
-      },
-    );
-    expect(g.figures[0]?.trend?.points.map((p) => p.display)).toEqual(["80%", "70%"]);
+    expect(said(g)).toContain("date column");
   });
 });

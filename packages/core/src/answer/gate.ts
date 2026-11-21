@@ -85,8 +85,10 @@ export interface FigureInput {
   detail?: string;
   /** A heading for figures that go together: Paid channels. */
   group?: string;
-  /** A column's last values, in the query's order: how it got here. */
-  trend?: { query: string; column: string; label?: string };
+  /** Its value's column over time (its query's rows, in time order, ending at the value). */
+  trend?: boolean | { label?: string };
+  /** What the trend covers, in words: Last weeks. */
+  trend_label?: string;
 }
 
 /** A headline figure, checked: each number a traced reference, its change's direction, its trend read from cells. */
@@ -198,6 +200,12 @@ export interface GateContext {
 const REF = /⟦([^⟦⟧]*)⟧/g;
 const REF_BODY = /⟦([^⟦⟧]*)⟧/;
 const ONE_REF = /^\s*⟦[^⟦⟧]*⟧\s*$/;
+/** The numbers a heading or a label may hold: a year, a quarter or half, a week, a month's day. */
+const DATE_WORDS =
+  /\b(?:19|20)\d{2}\b|\b[QH][1-4]\b|\b(?:week|wk)\s*\d{1,2}\b|\bW\d{1,2}\b|\b(?:jan|feb|mar|apr|may|jun|jul|aug|sep|sept|oct|nov|dec)[a-z]*\.?\s+\d{1,2}(?:st|nd|rd|th)?\b|\b\d{1,2}(?:st|nd|rd|th)?\s+(?:jan|feb|mar|apr|may|jun|jul|aug|sep|sept|oct|nov|dec)[a-z]*\b/gi;
+/** Numbers spelled out: in a heading or a label, a figure all the same. */
+const NUMBER_WORDS =
+  /\b(?:two|three|four|five|six|seven|eight|nine|ten|eleven|twelve|thirteen|fourteen|fifteen|sixteen|seventeen|eighteen|nineteen|twenty|thirty|forty|fifty|sixty|seventy|eighty|ninety|hundred|thousand|million|billion|dozen)\b/i;
 const CELL = /^\s*q(\d+)\s*:\s*(\d+)\s*:\s*([A-Za-z_][A-Za-z0-9_]*)\s*$/;
 const DERIVED = /^\s*(pct|delta|ratio|share|sum|avg)\s*\(([^()]*)\)\s*$/;
 const RELATIVE_TOLERANCE = 0.005;
@@ -282,7 +290,7 @@ function resolve(raw: string, ctx: GateContext): Resolved {
   const two = (f: (a: number, b: number) => number | null): Resolved => {
     if (nums.length !== 2) return { ok: false, message: `⟦${raw}⟧: ${fn}() takes two cells: (current, previous).` };
     const v = f(nums[0] as number, nums[1] as number);
-    return v === null
+    return v === null || !Number.isFinite(v)
       ? { ok: false, message: `⟦${raw}⟧: ${fn}() divides by zero.` }
       : { ok: true, kind: "number", value: v, citations, derived: fn };
   };
@@ -295,7 +303,9 @@ function resolve(raw: string, ctx: GateContext): Resolved {
     case "share":
       return two((a, b) => (b === 0 ? null : a / b));
     case "sum":
-      return { ok: true, kind: "number", value: nums.reduce((s, v) => s + v, 0), citations, derived: fn };
+      return Number.isFinite(nums.reduce((s, v) => s + v, 0))
+        ? { ok: true, kind: "number", value: nums.reduce((s, v) => s + v, 0), citations, derived: fn }
+        : { ok: false, message: `⟦${raw}⟧: ${fn}() is too large to show.` };
     default:
       return {
         ok: true,
@@ -312,31 +322,40 @@ function resolve(raw: string, ctx: GateContext): Resolved {
  * a cell, shown short in the figure's own format.
  */
 function trendOf(
-  spec: { query?: unknown; column?: unknown },
+  cell: { alias: string; row: number; column: string },
   shownAs: Format,
   ctx: GateContext,
 ): { ok: true; points: ChartPoint[] } | { ok: false; problem: string } {
-  const result = ctx.results.find((r) => r.alias === spec.query);
-  const index = result ? result.columns.findIndex((c) => c.name === spec.column) : -1;
-  const named = `${String(spec.query)}.${String(spec.column)}`;
-  if (!result || index < 0) return { ok: false, problem: `its trend reads ${named}, which isn't a column here.` };
-  if (result.columns[index]?.type !== "number") {
-    return { ok: false, problem: `its trend needs a numeric column; ${named} isn't one.` };
+  const result = ctx.results.find((r) => r.alias === cell.alias);
+  const index = result ? result.columns.findIndex((c) => c.name === cell.column) : -1;
+  if (!result || index < 0) return { ok: false, problem: "its trend is its value's column, and that isn't here." };
+  // In time order, by the query's date column: never the rows' order, which may run either way.
+  const time = result.columns.findIndex((c) => c.type === "date" || c.type === "timestamp");
+  if (time < 0)
+    return { ok: false, problem: `a trend needs ${result.alias} to have a date column, its values over time.` };
+  const seen = result.rows.slice(0, ctx.rowsShown).map((row, at) => ({ row, at }));
+  const when = (r: { row: Cell[] }) => Date.parse(String(r.row[time] ?? ""));
+  if (seen.some((r) => Number.isNaN(when(r))))
+    return { ok: false, problem: `a trend needs a date in every row of ${result.alias}.` };
+  const ordered = [...seen].sort((a, b) => when(a) - when(b));
+  if (ordered.at(-1)?.at !== cell.row) {
+    return {
+      ok: false,
+      problem: `a trend ends at its value, the latest row of ${result.alias}; its value's row isn't the latest.`,
+    };
   }
-  const seen = result.rows.slice(0, ctx.rowsShown);
-  const from = Math.max(seen.length - TREND_POINTS, 0);
   const format: Format = { ...shownAs, compact: true };
   const points: ChartPoint[] = [];
-  for (let row = from; row < seen.length; row++) {
-    const n = numeric(seen[row]?.[index] ?? null);
-    if (n === null) return { ok: false, problem: `its trend needs numbers; ${named} has a gap.` };
+  for (const { row, at } of ordered.slice(-TREND_POINTS)) {
+    const n = numeric(row[index] ?? null);
+    if (n === null) return { ok: false, problem: `its trend needs numbers; ${result.alias}.${cell.column} has a gap.` };
     points.push({
       value: n,
       display: formatNumber(n, format),
-      cell: { alias: result.alias, queryRunId: result.queryRunId, row, column: String(spec.column) },
+      cell: { alias: result.alias, queryRunId: result.queryRunId, row: at, column: cell.column },
     });
   }
-  if (points.length < 2) return { ok: false, problem: "a trend needs two rows or more." };
+  if (points.length < 2) return { ok: false, problem: `a trend needs two rows or more of ${result.alias}.` };
   return { ok: true, points };
 }
 
@@ -776,14 +795,14 @@ export function checkAnswer(raw: AnswerInput, ctx: GateContext): GateResult {
   const renderedCaveats = caveatParts.map((c) => c.rendered);
   const renderedInterpretation = interpretationParts.map((c) => c.rendered);
 
-  // Headline figures. A value is one reference to a measure, and a change is pct() or delta() of that same cell and the
-  // one before, rendered as the text's numbers are. A figure's words are words (no figure, no reference, no marks), a
-  // label and a line more name only the row their numbers are from, and a trend reads a numeric column's cells the
-  // model saw. Each figure is staged: one with a problem is sent back for repair and left out, and nothing it read
-  // counts for the answer (its checks, its count, its cross-check), as an undrawable chart doesn't. One that's shown
-  // counts in full, its trend's cells included.
+  // Headline figures. A value is one reference to a measure (numeric columns only); a change is pct() or delta() of
+  // that same cell against the same measure before (its column, or its row); a trend is the value's own column over
+  // time, in its query's time order, ending at the value. A figure's words are words (no figure, no reference, no
+  // marks), and every row its label, group or line more names is the row its numbers are from. Each figure is staged:
+  // one with a problem is sent back for repair and left out, and nothing it read counts for the answer (its checks, its
+  // count, the cross-check it would need). One that's shown counts in full.
   const figures: ResolvedFigure[] = [];
-  /** Each shown figure's value cells: a failed cross-check of one takes its figure out. */
+  /** Each shown figure's cells, every one it shows or computes from: a disagreeing cross-check of any takes it out. */
   const figureCells: Citation[][] = [];
   /** What's wrong with a figure or the title: repaired, never what decides whether the answer is verified. */
   const shownProblems: string[] = [];
@@ -792,14 +811,17 @@ export function checkAnswer(raw: AnswerInput, ctx: GateContext): GateResult {
     if (typeof words !== "string" || !words.trim()) return null;
     const quoted = `"${words.slice(0, 60)}"`;
     if (/[⟦⟧*_~`]/.test(words)) return `${name}: ${quoted} is plain words, without references or formatting marks.`;
-    if (typedNumerals(words, echoable).length || statesFigure(words, echoable)) {
+    // Stricter than the text's rule: a heading's or a label's only numbers are dates (a year, a quarter, a week).
+    const undated = words.replace(DATE_WORDS, " ");
+    if (/\p{N}/u.test(undated) || NUMBER_WORDS.test(undated) || statesFigure(words, echoable)) {
       return `${name}: ${quoted} states a figure outside a reference; say what it is in words.`;
     }
     return null;
   };
+  const columnOf = (c: { alias: string; column: string }) =>
+    ctx.results.find((r) => r.alias === c.alias)?.columns.find((col) => col.name === c.column);
   const figureSpecs = Array.isArray(input.figures) ? input.figures : [];
   if (figureSpecs.length > MAX_FIGURES) shownProblems.push(`At most ${MAX_FIGURES} figures.`);
-  const admittedGroups = new Set<string>();
   for (const f of figureSpecs.slice(0, MAX_FIGURES)) {
     const mark = {
       problems: problems.length,
@@ -810,71 +832,114 @@ export function checkAnswer(raw: AnswerInput, ctx: GateContext): GateResult {
       cells: new Set(numericCells),
     };
     const own: string[] = [];
+    const cells: Citation[] = [];
+    const detailCells: Citation[] = [];
     const label = typeof f?.label === "string" ? f.label.trim() : "";
     const name = `Figure "${label.slice(0, 40)}"`;
     if (!label) own.push(`${name}: give it a label, in words.`);
     const group = typeof f?.group === "string" ? f.group.trim() : "";
-    for (const words of [label, f?.vs, group, f?.trend?.label]) {
+    const trendLabel =
+      typeof f?.trend_label === "string"
+        ? f.trend_label
+        : typeof f?.trend === "object" && f.trend && typeof f.trend.label === "string"
+          ? f.trend.label
+          : "";
+    for (const words of [label, f?.vs, group, trendLabel]) {
       const problem = wordsProblem(name, words);
       if (problem) own.push(problem);
     }
-    if (group && !admittedGroups.has(group) && admittedGroups.size >= MAX_FIGURE_GROUPS) {
-      own.push(`${name}: at most ${MAX_FIGURE_GROUPS} groups of figures.`);
-    }
+    const named = [group, label].filter(Boolean).map((w) => w.replace(/[.!?:;]+$/, ""));
     const value = repairClosers(typeof f?.value === "string" ? f.value : "");
     if (!ONE_REF.test(value)) {
       own.push(`${name}: its value is one reference and nothing else, like ⟦q1:0:mrr|currency:USD,compact⟧.`);
     }
     const [valueRef, valueFormat] = (REF_BODY.exec(value)?.[1] ?? "").split("|");
     const measured = resolve(valueRef ?? "", ctx);
-    if (measured.ok && measured.kind !== "number") {
-      own.push(`${name}: its value is a measure, a number; a name or a date says what it is in its label.`);
+    if (
+      measured.ok &&
+      (measured.kind !== "number" || !measured.citations.every((c) => columnOf(c)?.type === "number"))
+    ) {
+      own.push(
+        `${name}: its value is a measure from a numeric column; a name, a date or a flag says what it is in words.`,
+      );
     }
+    const parsed = parseFormat(valueFormat);
+    const derived = measured.ok && measured.kind === "number" ? measured.derived : undefined;
+    const format = withDefaults(parsed.ok ? parsed.format : {}, derived);
+    if ((derived === "pct" || derived === "share") && format.currency) {
+      own.push(`${name}: a ${derived}() is a percent, never a currency.`);
+    }
+    if (measured.ok) cells.push(...measured.citations);
+    // The one cell it shows, when its value is one cell (not computed from several).
+    const cell = measured.ok && measured.kind === "number" && !derived ? measured.citations[0] : undefined;
     const shown = render(value);
     let change: ResolvedFigure["change"];
     if (typeof f?.change === "string" && f.change.trim()) {
       const text = repairClosers(f.change);
       const segments = render(text).segments;
       const changed = resolve((REF_BODY.exec(text)?.[1] ?? "").split("|")[0] ?? "", ctx);
-      const first = changed.ok ? changed.citations[0] : undefined;
-      const own0 = measured.ok && measured.kind === "number" && !measured.derived ? measured.citations[0] : undefined;
       const signed = changed.ok && changed.kind === "number" && /^(pct|delta)$/.test(changed.derived ?? "");
+      const [now, before] = changed.ok ? changed.citations : [];
       if (!ONE_REF.test(text) || (changed.ok && !signed)) {
         own.push(
           `${name}: its change is one reference, pct() or delta() of its value's cell and the one before: ⟦pct(q1:0:mrr,q1:1:mrr)⟧.`,
         );
-      } else if (own0 && first && cellKey(first) !== cellKey(own0)) {
-        own.push(`${name}: its change starts from ${cellKey(first)}, not its value's cell ${cellKey(own0)}.`);
+      } else if (changed.ok && !cell) {
+        own.push(`${name}: a change goes with a value that's one cell, not one computed from several.`);
+      } else if (cell && now && cellKey(now) !== cellKey(cell)) {
+        own.push(`${name}: its change starts from ${cellKey(now)}, not its value's cell ${cellKey(cell)}.`);
+      } else if (
+        now &&
+        before &&
+        before.column !== now.column &&
+        !(before.alias === now.alias && before.row === now.row)
+      ) {
+        // The same measure before: the same column (another row or query), or the same row's other column.
+        own.push(
+          `${name}: its change compares ${cellKey(now)} with ${cellKey(before)}, another measure; compare it with the same measure before.`,
+        );
       } else if (changed.ok && changed.kind === "number") {
         change = { segments, direction: changed.value > 0 ? "up" : changed.value < 0 ? "down" : "flat" };
+        cells.push(...changed.citations);
       }
     }
     let detail: AnswerSegment[] | undefined;
     if (typeof f?.detail === "string" && f.detail.trim()) {
       const text = repairClosers(f.detail);
-      if (/[*_~`]/.test(text.replace(REF, "")))
+      if (/[*_~`]/.test(text.replace(REF, ""))) {
         own.push(`${name}: its line more is plain words and references, without formatting marks.`);
+      }
+      // A reference stands alone: a digit, a unit or another reference right beside it would read as one number.
+      if (/⟧\s?[\p{N}%]|⟧[kKmMbB]\b|\p{N}\s?⟦|⟧\s*⟦/u.test(text)) {
+        own.push(`${name}: in its line more, each reference stands alone, with no digit, unit or reference beside it.`);
+      }
       const typed = typedNumerals(text, echoable);
       if (typed.length) own.push(`${name}: numbers must be references, never typed: "…${typed[0]?.context}…".`);
-      // The rows it names are the rows its numbers are from.
-      own.push(...rowProblems(text, ctx));
+      // Read with the card's own names: a Starter card's line more is about Starter.
+      own.push(...rowProblems(named.length ? `${named.join(", ")}: ${text}` : text, ctx));
       detail = render(text).segments;
+      for (const s of detail)
+        if ("ref" in s) detailCells.push(...s.citations.map((c) => ({ ...c, ref: s.ref, value: null })));
+      cells.push(...detailCells);
     }
     let trend: ResolvedFigure["trend"];
     if (f?.trend) {
-      // Shown as its value is: a share's trend in percent, as the share.
-      const parsed = parseFormat(valueFormat);
-      const format = withDefaults(
-        parsed.ok ? parsed.format : {},
-        measured.ok && measured.kind === "number" ? measured.derived : undefined,
-      );
-      const read = trendOf(f.trend, format, ctx);
-      if (read.ok) trend = { ...(f.trend.label?.trim() ? { label: f.trend.label.trim() } : {}), points: read.points };
-      else own.push(`${name}: ${read.problem}`);
+      const read = cell
+        ? trendOf(cell, format, ctx)
+        : { ok: false as const, problem: "a trend goes with a value that's one cell." };
+      if (read.ok) {
+        trend = { ...(trendLabel.trim() ? { label: trendLabel.trim() } : {}), points: read.points };
+      } else own.push(`${name}: ${read.problem}`);
     }
-    // Its group and label name the row its number is from, when they name one: "Google Ads" with Google Ads' row.
-    const named = [group, label].filter(Boolean).map((w) => w.replace(/[.!?:;]+$/, ""));
-    own.push(...rowProblems(`${named.join(", ")}: ${value}`, ctx));
+    // Its group and label name the row each number it shows is from, when they name one: each checked on its own (a
+    // computed value's every cell, a line more's), since all of a card's numbers are about what it names. A change's
+    // earlier value and a trend's are other periods, so other rows, and aren't.
+    if (named.length) {
+      const labelled = [...(measured.ok ? measured.citations : []), ...detailCells];
+      for (const c of new Map(labelled.map((c) => [cellKey(c), c])).values()) {
+        own.push(...rowProblems(`${named.join(", ")}: ⟦${cellKey(c)}⟧`, ctx));
+      }
+    }
     // Its references' own problems are its own: a figure that isn't shown doesn't make the answer unverified.
     own.unshift(...problems.splice(mark.problems));
     if (own.length) {
@@ -885,18 +950,16 @@ export function checkAnswer(raw: AnswerInput, ctx: GateContext): GateResult {
       for (const a of mark.sources) numericSources.add(a);
       numericCells.clear();
       for (const c of mark.cells) numericCells.add(c);
-      shownProblems.push(...own);
+      shownProblems.push(...[...new Set(own)]);
       continue;
     }
-    if (group) admittedGroups.add(group);
-    // A trend's cells are numbers shown: checked and counted as the rest.
+    // A trend's cells are numbers shown, from the value's own query: counted and cited (never a headline of its own).
     for (const p of trend?.points ?? []) {
       numericRefs += 1;
-      numericSources.add(p.cell.alias);
-      numericCells.add(cellKey(p.cell));
       citations.push({ ref: cellKey(p.cell), ...p.cell, value: p.value });
+      cells.push({ ref: cellKey(p.cell), ...p.cell, value: p.value });
     }
-    figureCells.push(measured.ok ? measured.citations : []);
+    figureCells.push(cells);
     figures.push({
       label,
       value: shown.segments,
@@ -1011,11 +1074,13 @@ export function checkAnswer(raw: AnswerInput, ctx: GateContext): GateResult {
         "Add a cross-check: compute the headline number a second, independent way (another query: a different grain, the sum of segments, another table) and list it in cross_checks.",
       );
     } else if (
-      !checks.some((c) => {
-        const a = resolveCell(c.headline, ctx);
-        // A number from your own SQL is what needs the second computation: a metric's doesn't stand in for it.
-        return a.ok && a.citations.some((x) => numericCells.has(cellKey(x)) && pathOf.get(x.alias) !== "metric");
-      })
+      !checks.some((c) =>
+        // A number from your own SQL is what needs the second computation: a metric's doesn't stand in for it. It may
+        // be either side of the pair.
+        [resolveCell(c.headline, ctx), resolveCell(c.check, ctx)].some(
+          (a) => a.ok && a.citations.some((x) => numericCells.has(cellKey(x)) && pathOf.get(x.alias) !== "metric"),
+        ),
+      )
     ) {
       problems.push(
         "Cross-check the answer's own headline: a cross_checks headline must be a cell from your own SQL that the answer cites as a number (⟦q1:0:mrr⟧ in the text → headline q1:0:mrr).",
@@ -1049,7 +1114,7 @@ export function checkAnswer(raw: AnswerInput, ctx: GateContext): GateResult {
         });
       }
       if (!agrees && !because) {
-        if (headline) failedHeadlines.add(cellKey(headline));
+        for (const x of [...a.citations, ...b.citations]) failedHeadlines.add(cellKey(x));
         problems.push(
           `Cross-check disagrees: ${c.headline} = ${a.value}, ${c.check} = ${b.value} (tolerance ${integers ? "exact for counts" : "0.5%"}). Find out why: a bug (fix the query) or two definitions (set differs_because and show both in the answer).`,
         );
@@ -1076,7 +1141,11 @@ export function checkAnswer(raw: AnswerInput, ctx: GateContext): GateResult {
   const verified = problems.length === 0;
   // A figure or a title that isn't right is sent back, never what marks the answer unverified: it isn't shown.
   problems.push(...shownProblems);
-  const shownFigures = figures.filter((_, i) => !(figureCells[i] ?? []).some((c) => failedHeadlines.has(cellKey(c))));
+  const checkedFigures = figures.filter((_, i) => !(figureCells[i] ?? []).some((c) => failedHeadlines.has(cellKey(c))));
+  // At most three groups, as they're drawn (the ungrouped figures a group of their own): the first three stay.
+  const keys = [...new Set(checkedFigures.map((f) => f.group ?? null))];
+  const shownFigures = checkedFigures.filter((f) => keys.indexOf(f.group ?? null) < MAX_FIGURE_GROUPS);
+  if (shownFigures.length < checkedFigures.length) problems.push(`At most ${MAX_FIGURE_GROUPS} groups of figures.`);
   const charts: ResolvedChart[] = [];
   const specs = input.charts ?? [];
   if (specs.length > MAX_CHARTS) problems.push(`At most ${MAX_CHARTS} charts per answer.`);

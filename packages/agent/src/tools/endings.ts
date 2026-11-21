@@ -80,10 +80,8 @@ export const answer = defineTool({
           vs: z.string().max(40).optional().describe("vs last week"),
           detail: z.string().max(120).optional(),
           group: z.string().max(40).optional(),
-          trend: z
-            .object({ query: z.string(), column: z.string(), label: z.string().max(30).optional() })
-            .optional()
-            .describe("A column over time, oldest first"),
+          trend: z.boolean().optional().describe("Its column over time, from its query's date column"),
+          trend_label: z.string().max(30).optional(),
         }),
       )
       .max(9)

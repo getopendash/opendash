@@ -502,7 +502,7 @@ describe("a run's reply in Slack", () => {
           // Today's message: its words as text, the figure as a field under them.
           expect(typeof stops.at(-1)?.args.markdown_text).toBe("string");
           expect(last).not.toContain('"carousel"');
-          expect(last).toContain('"*Accounts*\\n19\\nvs last week"');
+          expect(last).toContain('"Accounts\\n19\\nvs last week"');
         }
       }
     });

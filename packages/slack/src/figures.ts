@@ -78,13 +78,25 @@ function grouped(figures: ResolvedFigure[]): { name: string | null; figures: Res
   return out;
 }
 
+/** Text Slack's mrkdwn would read as formatting (bold, italics, a strike, code): such a figure goes as plain fields. */
+const MARKS = /[*_~`]/;
+const marked = (f: ResolvedFigure) =>
+  [
+    f.label,
+    f.group ?? "",
+    shownOf(f.value),
+    changeLine(f) ?? "",
+    f.detail ? shownOf(f.detail) : "",
+    trendLine(f) ?? "",
+  ].some((t) => MARKS.test(t));
+
 /**
  * The figures as Slack's cards: a carousel for each group, under its heading. A group with a figure whose numbers
- * can't fit a card whole goes as Slack's classic fields instead.
+ * can't fit a card whole, or whose words Slack would read as formatting, goes as Slack's classic fields instead.
  */
 export function figureCards(figures: ResolvedFigure[]): Block[] {
   return grouped(figures).flatMap((g) => {
-    const cards = g.figures.slice(0, CARD.perCarousel).map(card);
+    const cards = g.figures.slice(0, CARD.perCarousel).map((f) => (marked(f) ? null : card(f)));
     if (cards.some((c) => c === null)) return figureFields(g.figures);
     return [
       ...(g.name ? [{ type: "section", text: { type: "mrkdwn", text: `*${mrkdwn(g.name)}*` } }] : []),
@@ -93,44 +105,46 @@ export function figureCards(figures: ResolvedFigure[]): Block[] {
   });
 }
 
+/** Plain text for Slack: mentions quieted, nothing in it read as markup or formatting. */
+const plain = (text: string) => ({
+  type: "plain_text",
+  text: quiet(text.replace(/[^\S\n]+/g, " ").trim()),
+  emoji: false,
+});
+
 /**
  * The figures as Slack's classic fields, for a message without cards: a section a group (its heading its text), two
- * columns of fields, each the label, the value, and the change.
+ * columns of plain-text fields, each the label, the value, the change, a line more and the trend. Past a field's room
+ * (2,000 characters) the trend goes, then the line more: never a number cut.
  */
 export function figureFields(figures: ResolvedFigure[]): Block[] {
+  const field = (f: ResolvedFigure) => {
+    const lines = (extra: (string | null)[]) =>
+      [f.label, shownOf(f.value), changeLine(f), ...extra].filter((l): l is string => Boolean(l?.trim())).join("\n");
+    const detail = f.detail ? shownOf(f.detail) : null;
+    const text = [lines([detail, trendLine(f)]), lines([detail]), lines([])].find((t) => t.length <= 2_000);
+    return plain(text ?? `${f.label}\n${shownOf(f.value)}`);
+  };
   return grouped(figures).flatMap((g) =>
     // A section holds ten fields at most.
     Array.from({ length: Math.ceil(g.figures.length / 10) }, (_, i) => g.figures.slice(i * 10, i * 10 + 10)).map(
       (chunk, i) => ({
         type: "section",
-        ...(g.name && i === 0 ? { text: { type: "mrkdwn", text: `*${mrkdwn(g.name)}*` } } : {}),
-        fields: chunk.map((f) => {
-          const change = changeLine(f);
-          return {
-            type: "mrkdwn",
-            text: [
-              `*${mrkdwn(f.label)}*`,
-              mrkdwn(shownOf(f.value)),
-              change ? mrkdwn(change) : null,
-              f.detail ? mrkdwn(shownOf(f.detail)) : null,
-              trendLine(f) ? mrkdwn(trendLine(f) ?? "") : null,
-            ]
-              .filter(Boolean)
-              .join("\n")
-              .slice(0, 2_000),
-          };
-        }),
+        ...(g.name && i === 0 ? { text: plain(g.name) } : {}),
+        fields: chunk.map(field),
       }),
     ),
   );
 }
 
 /**
- * The figures as plain lines, for what a notification and a screen reader say: "Orders: 40 (▼ 20% vs last month)".
+ * The figures as plain lines, for what a notification and a screen reader say: "Starter · Orders: 40 (▼ 20% vs last
+ * month) · 6 returns", its group first and its line more after.
  */
 export function figureLines(figures: ResolvedFigure[]): string[] {
   return figures.map((f) => {
     const change = changeLine(f);
-    return `${f.label}: ${shownOf(f.value)}${change ? ` (${change})` : ""}`;
+    const detail = f.detail ? shownOf(f.detail).trim() : "";
+    return `${f.group ? `${f.group} · ` : ""}${f.label}: ${shownOf(f.value)}${change ? ` (${change})` : ""}${detail ? ` · ${detail}` : ""}`;
   });
 }

@@ -77,31 +77,37 @@ describe("headline figures as Slack's cards", () => {
     expect(title?.length).toBeLessThanOrEqual(152);
   });
 
-  it("are Slack's classic fields where cards aren't sent: a section a group, ten fields at most", () => {
+  it("are Slack's classic fields, as plain text, where cards aren't sent: a section a group, ten fields at most", () => {
     const blocks = figureFields([acquisition, channel("Google Ads", "$55"), channel("Meta", "$70")]);
+    const text = (t: string) => ({ type: "plain_text", text: t, emoji: false });
     expect(blocks).toEqual([
       {
         type: "section",
-        fields: [
-          {
-            type: "mrkdwn",
-            text: "*Acquisition*\n15,580\n▼ 5% vs last week\n6,727 activated\nLast weeks: 6.0k · 6.2k · 6.7k",
-          },
-        ],
+        fields: [text("Acquisition\n15,580\n▼ 5% vs last week\n6,727 activated\nLast weeks: 6.0k · 6.2k · 6.7k")],
       },
       {
         type: "section",
-        text: { type: "mrkdwn", text: "*Paid channels*" },
-        fields: [
-          { type: "mrkdwn", text: "*Google Ads*\n$55\n▲ 13% vs last week" },
-          { type: "mrkdwn", text: "*Meta*\n$70\n▲ 13% vs last week" },
-        ],
+        text: text("Paid channels"),
+        fields: [text("Google Ads\n$55\n▲ 13% vs last week"), text("Meta\n$70\n▲ 13% vs last week")],
       },
     ]);
     const many = Array.from({ length: 12 }, (_, i) => channel(`C${i}`, "$1", ""));
     expect(
       figureFields(many.map((f) => ({ ...f, group: undefined }))).map((b) => (b.fields as unknown[]).length),
     ).toEqual([10, 2]);
+  });
+
+  it("go as plain fields when their words would read as formatting, never struck or bold by accident", () => {
+    const struck: ResolvedFigure = { label: "Sales", value: [ref("12,345")], detail: [ref("~old~", "text")] };
+    const blocks = figureCards([struck]);
+    expect(blocks.map((b) => b.type)).toEqual(["section"]);
+    expect(JSON.stringify(blocks)).toContain('"type":"plain_text"');
+  });
+
+  it("drop the trend, then the line more, rather than cut a number past a field's room", () => {
+    const long: ResolvedFigure = { label: "Orders", value: [ref("12,345")], detail: [{ text: "x".repeat(1_990) }] };
+    const [section] = figureFields([long]);
+    expect(((section?.fields ?? []) as { text: string }[])[0]?.text).toBe("Orders\n12,345");
   });
 });
 
@@ -155,13 +161,18 @@ describe("headline figures, said whole", () => {
     expect(JSON.stringify(blocks)).toContain("9".repeat(160));
   });
 
-  it("are lines for a notification and a screen reader, whole lines within the room", () => {
-    expect(figureLines([acquisition])).toEqual(["Acquisition: 15,580 (▼ 5% vs last week)"]);
+  it("are lines for a notification and a screen reader, the words after them, quieted, cut between words", () => {
+    expect(figureLines([acquisition, channel("Meta", "$70")])).toEqual([
+      "Acquisition: 15,580 (▼ 5% vs last week) · 6,727 activated",
+      "Paid channels · Meta: $70 (▲ 13% vs last week)",
+    ]);
     const said = { title: "Growth at a glance", figures: [acquisition] };
     expect(noticeText(said, "Activated riders rose.")).toBe(
-      "Growth at a glance\nAcquisition: 15,580 (▼ 5% vs last week)\nActivated riders rose.",
+      "Growth at a glance\nAcquisition: 15,580 (▼ 5% vs last week) · 6,727 activated\nActivated riders rose.",
     );
-    expect(noticeText(said, "Activated riders rose.", 30)).toBe("Growth at a glance");
+    // A small room: the heading, then as many of the words as fit, never none.
+    expect(noticeText(said, "Activated riders rose.", 30)).toBe("Growth at a glance\nActivated…");
+    expect(noticeText({ title: "Hi <!channel>", figures: [] }, "Words.")).not.toContain("<!channel>");
   });
 
   it("are files to download too: the queries behind a figure and its trend", () => {

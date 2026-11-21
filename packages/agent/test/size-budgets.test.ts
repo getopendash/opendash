@@ -133,8 +133,8 @@ const AGENTS: Record<string, { sections: (db: Db) => Sections; tools: AgentTool[
 // read names /results/<alias> (an earlier query's rows read back from the ledger, not rerun): about 70 more on
 // every agent that reads.
 // An answer's title and headline figures (cards above its text, in the page and in Slack), and charts for every trend
-// or breakdown rather than one: about 0.48k of the analyst's prompt and 0.76k of its answer tool, on every call.
-const ANALYST_AGENT = { postgres: 7_700, clickhouse: 8_100, mysql: 8_050 };
+// or breakdown rather than one: about 0.53k of the analyst's prompt and 0.66k of its answer tool, on every call.
+const ANALYST_AGENT = { postgres: 7_750, clickhouse: 8_150, mysql: 8_100 };
 const BUDGET: Record<string, { agent: Record<Db, number>; tools: number }> = {
   analyst: { agent: ANALYST_AGENT, tools: 14_300 },
   "analyst with a definition to change": { agent: ANALYST_AGENT, tools: 15_550 },

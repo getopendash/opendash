@@ -232,6 +232,21 @@ function traceRows(answer: Answer, names: Map<string, QueryName>): Extract<Block
     const cells = s.citations;
     const first = cells[0];
     if (!first) continue;
+    // A number computed from several queries' cells names each cell with its own query.
+    if (new Set(cells.map((c) => c.queryRunId)).size > 1) {
+      const of = (c: (typeof cells)[number]) => {
+        const n = names.get(c.queryRunId);
+        return { alias: n?.alias ?? c.alias, title: n?.title };
+      };
+      rows.push({
+        figure: s.display,
+        query: [...new Map(cells.map((c) => [c.queryRunId, of(c)])).values()]
+          .map((q) => (q.title ? `${q.alias} · ${q.title}` : q.alias))
+          .join("; "),
+        cell: cells.map((c) => `${of(c).alias} row ${c.row + 1} · ${c.column}`).join("; "),
+      });
+      continue;
+    }
     const name = names.get(first.queryRunId);
     const alias = name?.alias ?? first.alias;
     const rowsOf = [...new Set(cells.map((c) => c.row + 1))];
