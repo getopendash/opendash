@@ -595,7 +595,7 @@ class Reply {
         this.deps.withTenant(orgId, (tx) => checkSlackReplyAttempt(tx, orgId, runId, this.attempt)),
       );
       try {
-        return await send(replyBlocks(said, runId, t.feedback, this.remembered, dm), t.card);
+        return await send(replyBlocks(said, runId, t.feedback, this.remembered, dm, t.card === null), t.card);
       } catch (error) {
         const why = failureCode(error);
         const next = tries[i + 1];

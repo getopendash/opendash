@@ -17,6 +17,7 @@ import { type CardLimits, toCard } from "@json-render/chat";
 import type { Spec } from "@json-render/core";
 import type { AnswerSegment, ResolvedChart, RunOutcome } from "@opendash/core";
 import { hasDefinitions, REF_CLOSE, REF_OPEN, takeTable, visibleLinks } from "@opendash/markdown";
+import { figureCards } from "./figures";
 import { hasNumbers, MESSAGE_LIMIT, quiet } from "./reply";
 
 type Answer = Extract<RunOutcome, { kind: "answer" }>;
@@ -226,7 +227,8 @@ export function answerCard(
   const cells = taken && { head: taken.head.map(fill), rows: taken.rows.map((r) => r.map(fill)) };
   const table = taken?.flat && cells && tableFits(cells.head, cells.rows) ? { ...taken, ...cells } : null;
   const charts = natives(answer).slice(0, SLACK.charts);
-  if (!table && !charts.length) return null;
+  const figures = answer.figures ?? [];
+  if (!table && !charts.length && !figures.length) return null;
 
   // The words, as the plain message says them (mentions quieted, every link's address in sight, values included), in
   // one message. How it read the question and its caveats go under them, as for every answer (`replyBlocks`).
@@ -235,13 +237,24 @@ export function answerCard(
   const after = table ? said(table.after) : "";
   if ([before, after].join("\n\n").length > MESSAGE_LIMIT) return null;
   const lead = address ? address(before) : before;
-  const converted = slackBlocks(table, charts);
+  const converted = table || charts.length ? slackBlocks(table, charts) : [];
   if (!converted) return null;
   const tableBlock = table ? converted[0] : undefined;
   const chartBlocks = table ? converted.slice(1) : converted;
   const md = (text: string): Block[] => (text.trim() ? [{ type: "markdown", text }] : []);
+  // Its heading, then its headline figures as Slack's cards, then the words, the table where it was, the charts.
+  const header: Block[] = answer.title
+    ? [{ type: "header", text: { type: "plain_text", text: shorten(quiet(answer.title), 150), emoji: true } }]
+    : [];
   return {
-    blocks: [...md(lead), ...(tableBlock ? [tableBlock] : []), ...md(after), ...chartBlocks],
+    blocks: [
+      ...header,
+      ...figureCards(figures),
+      ...md(lead),
+      ...(tableBlock ? [tableBlock] : []),
+      ...md(after),
+      ...chartBlocks,
+    ],
     charts: charts.map((c) => c.index),
   };
 }

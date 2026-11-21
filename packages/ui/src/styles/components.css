@@ -521,10 +521,17 @@
     overflow-clip-margin: var(--spacing);
   }
 
+  /* An answer's headline figures (Ask): cards as wide as fit, at least a number and its label's width. */
+  .answer-figures__grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(calc(var(--spacing) * 38), 1fr));
+    gap: calc(var(--spacing) * 2);
+  }
+
   /*
    * An answer landing where its draft was (Ask): its text stays where the person is reading, and only its numbers fade
-   * in where the pills were. What the draft didn't have rises in below it; its chips, above it, grow open from nothing
-   * with the column's gap under them (gap-3), so the text slides down rather than jumps.
+   * in where the pills were. What the draft didn't have rises in below it; its heading, chips and headline figures, above
+   * it, grow open from nothing with the column's gap under them (gap-3), so the text slides down rather than jumps.
    */
   .answer-landing > * {
     animation: vg-rise var(--motion-base) var(--motion-ease) both;
@@ -538,13 +545,16 @@
     animation: vg-fade var(--motion-base) var(--motion-ease) both;
   }
 
-  .answer-landing > .answer-body__chips {
+  .answer-landing > .answer-body__chips,
+  .answer-landing > .answer-body__title,
+  .answer-landing > .answer-body__figures {
     display: grid;
     grid-template-rows: 1fr;
     animation: vg-grow-above var(--motion-base) var(--motion-ease) both;
   }
 
-  .answer-landing > .answer-body__chips > * {
+  .answer-landing > .answer-body__chips > *,
+  .answer-landing > .answer-body__figures > * {
     min-height: 0;
     overflow: clip;
     overflow-clip-margin: var(--spacing);

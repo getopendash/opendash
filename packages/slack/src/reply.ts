@@ -9,11 +9,13 @@ import {
   clarifyQuestions,
   type QueryCard,
   type ResolvedChart,
+  type ResolvedFigure,
   type RunOutcome,
 } from "@opendash/core";
 import { queryCsv } from "@opendash/core/csv";
 import { flatLine, visibleLinks } from "@opendash/markdown";
 import { spelledOut } from "./ask";
+import { figureFields } from "./figures";
 import { LEARNING_SUGGEST } from "./learning";
 
 /** A run event, as the reply reads it. */
@@ -175,6 +177,8 @@ export interface ReplyText {
   context: { reading: string | null; caveats: string[] };
   /** What the Download menu offers: the answer as a PDF, each cited query's rows as CSV (filled in by the reply). */
   downloads: Download[];
+  /** Its headline figures: cards in a card, Slack's classic fields under today's message. */
+  figures: ResolvedFigure[];
 }
 
 /** A file the Download menu offers: its words, and what a press asks for (the run and the file, nothing said). */
@@ -271,6 +275,7 @@ const plain = (body: string, url: string, label = "Open in OpenDash", answered =
   answered,
   context: { reading: null, caveats: [] },
   downloads: [],
+  figures: [],
 });
 
 /**
@@ -363,6 +368,7 @@ export function replyText(outcome: RunOutcome | null, status: string, url: strin
     answered: true,
     context: { reading: outcome.interpretation.join(" · ") || null, caveats: outcome.caveats },
     downloads: [],
+    figures: outcome.figures ?? [],
   };
 }
 
@@ -412,8 +418,11 @@ export function replyBlocks(
   feedback: "native" | "plain" = "native",
   remembered: { id: string; fact: string; why?: string }[] = [],
   inDm = true,
+  /** Its headline figures as Slack's classic fields: for today's message, not a card (which has them as cards). */
+  figures = true,
 ): Record<string, unknown>[] {
   const blocks: Record<string, unknown>[] = [];
+  if (figures && said.figures.length) blocks.push(...figureFields(said.figures));
   // How it read the question, then each caveat: quiet lines under the words, as plain text.
   // As quiet plain lines, when each says what its Markdown does, fits one, and there are few enough; else as today's
   // Markdown (italic, quoted), whole, never cut.

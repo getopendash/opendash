@@ -763,3 +763,93 @@ describe("what the cross-check and the typed-number rules can't be talked around
     expect(checkAnswer(answer("MRR was ⟦q1:0:mrr|currency:USD⟧. Your file says 1,300."), files).passed).toBe(false);
   });
 });
+
+describe("an answer's headline figures", () => {
+  const mrr = { label: "MRR", value: "⟦q1:0:mrr|currency:USD,compact⟧" };
+
+  it("checks each one as the text's numbers: its value, its change and its direction, a line more, a trend", () => {
+    const gate = checkAnswer(
+      answer("MRR rose to ⟦q1:0:mrr|currency:USD,compact⟧.", {
+        title: "MRR at a glance",
+        figures: [
+          {
+            ...mrr,
+            change: "⟦pct(q1:0:mrr,q1:1:mrr)⟧",
+            vs: "vs August",
+            detail: "Starter lost ⟦q3:0:churned_mrr|currency:USD,compact⟧",
+            group: "Revenue",
+            trend: { query: "q1", column: "mrr", label: "By month" },
+          },
+        ],
+      }),
+      ctx,
+    );
+    expect(gate.problems).toEqual([]);
+    expect(gate.title).toBe("MRR at a glance");
+    const [f] = gate.figures;
+    expect(f?.value).toEqual([
+      {
+        ref: "q1:0:mrr",
+        display: "$412.6k",
+        kind: "number",
+        citations: [{ alias: "q1", queryRunId: "run-1", row: 0, column: "mrr" }],
+      },
+    ]);
+    expect(f?.change?.direction).toBe("up");
+    expect(f?.change?.segments[0]).toMatchObject({ display: "+4.2%", kind: "number" });
+    expect(f?.detail?.map((s) => ("ref" in s ? s.display : s.text)).join("")).toBe("Starter lost $4.1k");
+    expect(f).toMatchObject({ label: "MRR", vs: "vs August", group: "Revenue" });
+    // Its trend: the column's cells in the query's order, shown short, each traced.
+    expect(f?.trend).toMatchObject({
+      label: "By month",
+      points: [
+        { value: 412600, display: "$412.6k", cell: { alias: "q1", row: 0, column: "mrr" } },
+        { value: 395969.29, display: "$396k", cell: { alias: "q1", row: 1, column: "mrr" } },
+      ],
+    });
+  });
+
+  it("sends back a figure that isn't one reference, types a number, or names another row; the good ones stay", () => {
+    const gate = checkAnswer(
+      answer("MRR rose to ⟦q1:0:mrr|currency:USD,compact⟧.", {
+        figures: [
+          mrr,
+          { label: "MRR", value: "about ⟦q1:0:mrr⟧" },
+          { label: "Churn", value: "⟦q3:0:churned_mrr⟧", change: "+12%" },
+          { label: "Churn", value: "⟦q3:0:churned_mrr⟧", detail: "down from 5,000" },
+          { label: "MRR over 400k", value: "⟦q2:0:mrr⟧" },
+          { label: "Growth", value: "⟦q3:0:churned_mrr⟧" },
+          { label: "MRR", value: "⟦q1:0:mrr⟧", trend: { query: "q1", column: "plan" } },
+        ],
+      }),
+      ctx,
+    );
+    expect(gate.passed).toBe(false);
+    const said = gate.problems.join("\n");
+    expect(said).toContain('Figure "MRR": its value is one reference');
+    expect(said).toContain('Figure "Churn": its change is one reference');
+    expect(said).toContain('Figure "Churn": numbers must be references');
+    expect(said).toContain('"MRR over 400k" states a figure');
+    expect(said).toContain("isn't a column here");
+    // "Growth" names q3's row 1, but the value is row 0's (Starter's).
+    expect(said).toMatch(/Growth/);
+    // Only the first figure passed every check.
+    expect(gate.figures.map((f) => f.value.map((s) => ("ref" in s ? s.ref : "")).join(""))).toEqual(["q1:0:mrr"]);
+  });
+
+  it("are numbers of the answer: one in a figure alone needs its cross-check", () => {
+    const gate = checkAnswer(answer("MRR is up.", { cross_checks: [], figures: [mrr] }), ctx);
+    expect(gate.problems.join("\n")).toContain("Add a cross-check");
+    expect(gate.checked.numbers).toBe(1);
+  });
+
+  it("are at most nine, in three groups at most; a heading states no figure", () => {
+    const many = Array.from({ length: 10 }, () => mrr);
+    expect(checkAnswer(answer("MRR.", { figures: many }), ctx).problems).toContain("At most 9 figures.");
+    const groups = ["A", "B", "C", "D"].map((group) => ({ ...mrr, group }));
+    expect(checkAnswer(answer("MRR.", { figures: groups }), ctx).problems).toContain("At most 3 groups of figures.");
+    const loud = checkAnswer(answer("MRR.", { title: "MRR passed 400k" }), ctx);
+    expect(loud.title).toBeNull();
+    expect(loud.problems.join("\n")).toContain('"MRR passed 400k" states a figure');
+  });
+});

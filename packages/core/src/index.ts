@@ -14,8 +14,10 @@ export {
   type CrossCheck,
   type CrossCheckCell,
   checkAnswer,
+  type FigureInput,
   type GateContext,
   type GateResult,
+  type ResolvedFigure,
   typedNumbers,
 } from "./answer/gate";
 export * from "./audit";

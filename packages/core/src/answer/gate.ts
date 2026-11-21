@@ -9,7 +9,7 @@
 
 import type { Cell, ColumnType } from "@opendash/connectors";
 import { hasFigure } from "../figures/types";
-import { type ResolvedChart, resolveChart } from "./chart";
+import { type ChartPoint, type ResolvedChart, resolveChart } from "./chart";
 import { type Format, formatNumber, formatTime, parseFormat } from "./format";
 
 /** One query result the conversation can cite, by its alias. */
@@ -67,6 +67,38 @@ const crossCheckCell = (c: Citation, value: number): CrossCheckCell => ({
 });
 
 const MAX_CHARTS = 3;
+const MAX_FIGURES = 9;
+const MAX_FIGURE_GROUPS = 3;
+const TREND_POINTS = 8;
+
+/** A headline figure as the answer gives it: one number, its change against a period, a line more, a short trend. */
+export interface FigureInput {
+  /** What it is, in words: Activated riders. */
+  label: string;
+  /** One reference: ⟦q1:0:activated|compact⟧. */
+  value: string;
+  /** Its change, one reference (a derived one): ⟦pct(q1:0:activated,q1:1:activated)⟧. */
+  change?: string;
+  /** What the change is against, in words: vs last week. */
+  vs?: string;
+  /** One short line more, its numbers references: ⟦q1:0:trials⟧ trials. */
+  detail?: string;
+  /** A heading for figures that go together: Paid channels. */
+  group?: string;
+  /** A column's last values, in the query's order: how it got here. */
+  trend?: { query: string; column: string; label?: string };
+}
+
+/** A headline figure, checked: each number a traced reference, its change's direction, its trend read from cells. */
+export interface ResolvedFigure {
+  label: string;
+  value: AnswerSegment[];
+  change?: { segments: AnswerSegment[]; direction: "up" | "down" | "flat" };
+  vs?: string;
+  detail?: AnswerSegment[];
+  group?: string;
+  trend?: { label?: string; points: ChartPoint[] };
+}
 
 export interface AnswerInput {
   status: "answered" | "cannot_answer";
@@ -79,6 +111,10 @@ export interface AnswerInput {
   charts?: unknown[];
   /** Follow-ups it can answer, as the person would ask them; questions, not claims, so not checked. */
   next?: string[];
+  /** A short heading for the answer, in words. */
+  title?: string;
+  /** Headline figures, each checked as the text's numbers are. */
+  figures?: FigureInput[];
 }
 
 export interface Citation {
@@ -134,6 +170,10 @@ export interface GateResult {
   crossChecks: CheckedCrossCheck[];
   /** The charts that resolved, each point a cell. */
   charts: ResolvedChart[];
+  /** Its heading, when it gave one that passed. */
+  title: string | null;
+  /** The headline figures that resolved, every number a cell (one with a problem is left out). */
+  figures: ResolvedFigure[];
 }
 
 export interface GateContext {
@@ -156,6 +196,8 @@ export interface GateContext {
 }
 
 const REF = /⟦([^⟦⟧]*)⟧/g;
+const REF_BODY = /⟦([^⟦⟧]*)⟧/;
+const ONE_REF = /^\s*⟦[^⟦⟧]*⟧\s*$/;
 const CELL = /^\s*q(\d+)\s*:\s*(\d+)\s*:\s*([A-Za-z_][A-Za-z0-9_]*)\s*$/;
 const DERIVED = /^\s*(pct|delta|ratio|share|sum|avg)\s*\(([^()]*)\)\s*$/;
 const RELATIVE_TOLERANCE = 0.005;
@@ -263,6 +305,46 @@ function resolve(raw: string, ctx: GateContext): Resolved {
         derived: fn,
       };
   }
+}
+
+/**
+ * A figure's trend: a numeric column's last values in the query's order (up to eight, of the rows the model saw), each
+ * a cell, shown short in the figure's own format.
+ */
+function trendOf(
+  spec: { query?: unknown; column?: unknown },
+  formatPart: string | undefined,
+  ctx: GateContext,
+): { ok: true; points: ChartPoint[] } | { ok: false; problem: string } {
+  const result = ctx.results.find((r) => r.alias === spec.query);
+  const index = result ? result.columns.findIndex((c) => c.name === spec.column) : -1;
+  if (!result || index < 0) {
+    return {
+      ok: false,
+      problem: `its trend reads ${String(spec.query)}.${String(spec.column)}, which isn't a column here.`,
+    };
+  }
+  const seen = result.rows.slice(0, ctx.rowsShown);
+  const from = Math.max(seen.length - TREND_POINTS, 0);
+  const parsed = parseFormat(formatPart);
+  const format: Format = { ...(parsed.ok ? parsed.format : {}), compact: true };
+  const points: ChartPoint[] = [];
+  for (let row = from; row < seen.length; row++) {
+    const n = numeric(seen[row]?.[index] ?? null);
+    if (n === null || result.columns[index]?.type === "text") {
+      return {
+        ok: false,
+        problem: `its trend needs numbers; ${result.alias}.${String(spec.column)} has a gap or text.`,
+      };
+    }
+    points.push({
+      value: n,
+      display: formatNumber(n, format),
+      cell: { alias: result.alias, queryRunId: result.queryRunId, row, column: String(spec.column) },
+    });
+  }
+  if (points.length < 2) return { ok: false, problem: "a trend needs two rows or more." };
+  return { ok: true, points };
 }
 
 /** Defaults per derived function: pct is a signed percent, share a percent, ratio two decimals. */
@@ -701,6 +783,73 @@ export function checkAnswer(raw: AnswerInput, ctx: GateContext): GateResult {
   const renderedCaveats = caveatParts.map((c) => c.rendered);
   const renderedInterpretation = interpretationParts.map((c) => c.rendered);
 
+  // Headline figures: a value and a change are each one reference, rendered as the text's are, so their numbers are the
+  // answer's (checked, counted, cross-checked). A label is words; a line more holds references for its numbers; a trend
+  // reads a column's cells the model saw. A figure with a problem goes back for repair, and is left out on the last.
+  const figures: ResolvedFigure[] = [];
+  const echoable = ctx.definitions ? `${ctx.question}\n${ctx.definitions}` : ctx.question;
+  const figureSpecs = Array.isArray(input.figures) ? input.figures : [];
+  if (figureSpecs.length > MAX_FIGURES) problems.push(`At most ${MAX_FIGURES} figures.`);
+  const groups = new Set(figureSpecs.map((f) => f?.group?.trim()).filter(Boolean));
+  if (groups.size > MAX_FIGURE_GROUPS) problems.push(`At most ${MAX_FIGURE_GROUPS} groups of figures.`);
+  for (const f of figureSpecs.slice(0, MAX_FIGURES)) {
+    const before = problems.length;
+    const label = typeof f?.label === "string" ? f.label.trim() : "";
+    const name = `Figure "${label.slice(0, 40)}"`;
+    if (!label) problems.push(`${name}: give it a label, in words.`);
+    // Its words state no figure of their own (as a chart's title doesn't): its number is its reference.
+    for (const words of [label, f?.vs, f?.group, f?.trend?.label]) {
+      if (typeof words === "string" && words.trim() && statesFigure(words, echoable)) {
+        problems.push(`${name}: "${words.slice(0, 60)}" states a figure outside a reference; say what it is in words.`);
+      }
+    }
+    const value = repairClosers(typeof f?.value === "string" ? f.value : "");
+    if (!ONE_REF.test(value)) {
+      problems.push(`${name}: its value is one reference and nothing else, like ⟦q1:0:mrr|currency:USD,compact⟧.`);
+    }
+    const shown = render(value);
+    let change: ResolvedFigure["change"];
+    if (typeof f?.change === "string" && f.change.trim()) {
+      const text = repairClosers(f.change);
+      if (!ONE_REF.test(text)) problems.push(`${name}: its change is one reference, like ⟦pct(q1:0:mrr,q1:1:mrr)⟧.`);
+      const segments = render(text).segments;
+      const resolved = resolve((REF_BODY.exec(text)?.[1] ?? "").split("|")[0] ?? "", ctx);
+      if (resolved.ok && resolved.kind !== "number") problems.push(`${name}: its change must be a number.`);
+      if (resolved.ok && resolved.kind === "number") {
+        change = { segments, direction: resolved.value > 0 ? "up" : resolved.value < 0 ? "down" : "flat" };
+      }
+    }
+    let detail: AnswerSegment[] | undefined;
+    if (typeof f?.detail === "string" && f.detail.trim()) {
+      const text = repairClosers(f.detail);
+      const typed = typedNumerals(text, echoable);
+      if (typed.length) {
+        problems.push(`${name}: numbers must be references, never typed: "…${typed[0]?.context}…".`);
+      }
+      detail = render(text).segments;
+    }
+    let trend: ResolvedFigure["trend"];
+    if (f?.trend) {
+      const read = trendOf(f.trend, REF_BODY.exec(value)?.[1]?.split("|")[1], ctx);
+      if (read.ok) trend = { ...(f.trend.label?.trim() ? { label: f.trend.label.trim() } : {}), points: read.points };
+      else problems.push(`${name}: ${read.problem}`);
+    }
+    // The label names the row its number is from, when it names one: "Google Ads" with Google Ads' row.
+    problems.push(...rowProblems(`${label} ${value}`, ctx));
+    if (problems.length === before) {
+      figures.push({
+        label,
+        value: shown.segments,
+        ...(change ? { change } : {}),
+        ...(f.vs?.trim() ? { vs: f.vs.trim() } : {}),
+        ...(detail ? { detail } : {}),
+        ...(f.group?.trim() ? { group: f.group.trim() } : {}),
+        ...(trend ? { trend } : {}),
+      });
+    }
+  }
+  const title = typeof input.title === "string" ? input.title.trim() : "";
+
   // A ⟦ that never closes isn't a reference at all; say so, rather than calling its digits typed numbers.
   const open = [...input.markdown.replace(REF, "").matchAll(/⟦[^\n]{0,40}/g)].map((m) => m[0]);
   if (open.length) {
@@ -749,7 +898,6 @@ export function checkAnswer(raw: AnswerInput, ctx: GateContext): GateResult {
     }
   }
 
-  const echoable = ctx.definitions ? `${ctx.question}\n${ctx.definitions}` : ctx.question;
   // 4. No numerals outside references (the user's own numbers, dates, codes and list markers are fine).
   const typed = [
     ...typedNumerals(input.markdown, echoable),
@@ -853,7 +1001,9 @@ export function checkAnswer(raw: AnswerInput, ctx: GateContext): GateResult {
       return [spec.title, ...(Array.isArray(spec.labels) ? spec.labels : [])];
     }),
     ...(input.next ?? []),
-  ].filter((t): t is string => typeof t === "string");
+    // The answer's heading: a figure's words are checked with the figure.
+    title,
+  ].filter((t): t is string => typeof t === "string" && t.trim() !== "");
   for (const t of shown.filter((t) => statesFigure(t, echoable)).slice(0, 3)) {
     problems.push(
       `"${t.slice(0, 80)}" states a figure outside a reference: say what it shows, and let a reference or the chart show the number.`,
@@ -874,6 +1024,8 @@ export function checkAnswer(raw: AnswerInput, ctx: GateContext): GateResult {
     passed: problems.length === 0,
     verified,
     charts,
+    title: title && !statesFigure(title, echoable) ? title.slice(0, 120) : null,
+    figures,
     problems,
     rendered,
     caveats: renderedCaveats,

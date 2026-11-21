@@ -464,6 +464,49 @@ describe("a run's reply in Slack", () => {
         // The chart images, not the files someone asked for.
         .filter((title) => !/\.(pdf|csv)$/.test(title));
 
+    it("opens with its heading and its headline figures as Slack's cards; where Slack refuses them, as fields", async () => {
+      const figure = {
+        label: "Accounts",
+        value: [
+          {
+            ref: "q1:0:accounts",
+            display: "19",
+            kind: "number",
+            citations: [{ alias: "q1", queryRunId: "x", row: 0, column: "accounts" }],
+          },
+        ],
+        vs: "vs last week",
+      };
+      for (const refuse of [false, true]) {
+        const q = await question();
+        const base = tabled(await cited(q.runId)) as Extract<RunOutcome, { kind: "answer" }>;
+        await q.end({ ...base, title: "Plans at a glance", figures: [figure] });
+        if (refuse) {
+          fake.answer("chat.stopStream", (a) =>
+            /"carousel"/.test(JSON.stringify(a.blocks ?? "")) ? { ok: false, error: "invalid_blocks" } : null,
+          );
+        }
+        const calls = from();
+        try {
+          expect(await deliverSlackReply(deps, slack, q.job)).toBe("done");
+        } finally {
+          fake.answer("chat.stopStream", null);
+        }
+        const stops = calls().filter((c) => c.method === "chat.stopStream" && c.args.metadata);
+        const last = JSON.stringify(stops.at(-1)?.args.blocks);
+        if (!refuse) {
+          const types = ((stops[0]?.args.blocks ?? []) as { type: string }[]).map((b) => b.type);
+          expect(types.slice(0, 3)).toEqual(["header", "carousel", "markdown"]);
+          expect(last).toContain('"*Accounts: 19*"');
+        } else {
+          // Today's message: its words as text, the figure as a field under them.
+          expect(typeof stops.at(-1)?.args.markdown_text).toBe("string");
+          expect(last).not.toContain('"carousel"');
+          expect(last).toContain('"*Accounts*\\n19\\nvs last week"');
+        }
+      }
+    });
+
     it("puts the answer in as Slack's own table and chart as the stream stops; the chart it can't draw goes as an image", async () => {
       const q = await question();
       await q.end(tabled(await cited(q.runId)));

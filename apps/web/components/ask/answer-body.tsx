@@ -6,13 +6,14 @@ import { CornerDownRight, Info } from "lucide-react";
 import type { ReactNode } from "react";
 import { chipText } from "@/lib/readings";
 import { AnswerChart } from "./answer-chart";
+import { AnswerFigures } from "./answer-figures";
 import { AnswerText, type TracedRef } from "./answer-text";
 import { ReadingPopover } from "./reading-popover";
 
 /** What it draws of an answer: what a public share link sends too (`PublicReport.answer`). */
 type Answer = Pick<
   Extract<RunOutcome, { kind: "answer" }>,
-  "status" | "verified" | "path" | "rendered" | "segments" | "charts" | "next"
+  "status" | "verified" | "path" | "rendered" | "segments" | "charts" | "next" | "title" | "figures"
 > & { caveats?: string[] };
 
 /**
@@ -47,7 +48,8 @@ export function AnswerBody({
   const couldNot = answer.status === "cannot_answer";
   return (
     <>
-      {/* The chips and the text are named for an answer landing where its draft was (`.answer-landing`). */}
+      {/* Its heading, chips, figures and text are named for an answer landing where its draft was (`.answer-landing`). */}
+      {answer.title ? <h2 className="answer-body__title text-lead font-semibold">{answer.title}</h2> : null}
       {segments?.interpretation.length ? (
         <div className="answer-body__chips">
           <div className="flex flex-wrap gap-1.5">
@@ -68,6 +70,11 @@ export function AnswerBody({
               </span>
             ))}
           </div>
+        </div>
+      ) : null}
+      {answer.figures?.length ? (
+        <div className="answer-body__figures">
+          <AnswerFigures figures={answer.figures} inspected={inspected} onTrace={onTrace} />
         </div>
       ) : null}
       <div className="answer-body__text">
