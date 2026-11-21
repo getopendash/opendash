@@ -16,7 +16,7 @@ import { cardToBlockKit, type SlackCardElement } from "@chat-adapter/slack/block
 import { type CardLimits, toCard } from "@json-render/chat";
 import type { Spec } from "@json-render/core";
 import type { AnswerSegment, ResolvedChart, RunOutcome } from "@opendash/core";
-import { REF_CLOSE, REF_OPEN, takeTable, visibleLinks } from "@opendash/markdown";
+import { hasDefinitions, REF_CLOSE, REF_OPEN, takeTable, visibleLinks } from "@opendash/markdown";
 import { answerTail, hasNumbers, MESSAGE_LIMIT, quiet } from "./reply";
 
 type Answer = Extract<RunOutcome, { kind: "answer" }>;
@@ -81,6 +81,8 @@ const labels = (names: string[]): string[] | null => {
  */
 export function nativeChart(chart: ResolvedChart): Record<string, unknown> | null {
   const { categories, series, axis } = chart;
+  // Slack's bars stand up: a chart drawn on its side stays the image that draws it so.
+  if (chart.horizontal) return null;
   if (!categories.length || categories.length > SLACK.chartPoints) return null;
   if (!series.length || series.length > SLACK.chartSeries) return null;
   if (series.some((s) => s.points.length !== categories.length || s.points.some((p) => p === null))) return null;
@@ -90,7 +92,7 @@ export function nativeChart(chart: ResolvedChart): Record<string, unknown> | nul
   if (!cats || !names || !title) return null;
   // The value itself, never rounded (a tiny share stays above zero); a percentage in the units its labels use, without
   // the float noise of the scaling (0.07 × 100 is 7.000000000000001).
-  const value = (v: number) => (axis.percent ? Number((v * 100).toPrecision(12)) : v);
+  const value = (v: number) => (axis.percent ? Number((v * 100).toPrecision(15)) : v);
   const values = series.map((s) => s.points.map((p) => value(p?.value ?? 0)));
   if (values.some((vs) => vs.some((v) => !Number.isFinite(v)))) return null;
   const yLabel = axis.percent ? "%" : axis.currency ? axis.currency : undefined;
@@ -140,11 +142,17 @@ export function answerCard(
   if (answer?.status !== "answered" || !answer.verified || answer.problems.length || !hasNumbers(answer)) return null;
   // An older answer has no segments to read its table from safely: today's message.
   if (!answer.segments) return null;
-  // Every link's address in sight first, across the whole answer (a reference link's definition can come after the
-  // table), then the table taken out of it; the values go back in after the parse.
-  const { source, fill } = withPlaceholders(answer.segments.markdown);
-  const linked = visibleLinks(source.trim());
-  const taken = takeTable(linked);
+  const segments = answer.segments.markdown;
+  // Text that holds a placeholder's own characters could take a value that isn't its own: today's message.
+  if (segments.some((s) => !("ref" in s) && (s.text.includes(REF_OPEN) || s.text.includes(REF_CLOSE)))) return null;
+  // The table is read from the answer as written, each value a placeholder, so nothing in a value or a link can move
+  // a cell; the values go back in after the parse.
+  const { source, fill } = withPlaceholders(segments);
+  const body = source.trim();
+  // A link that uses a definition elsewhere (`[g]: https://…`) is shown with its address only when the whole reply is
+  // read at once, as today's message reads it: that one, then.
+  if ([body, ...answer.interpretation, ...answer.caveats].some(hasDefinitions)) return null;
+  const taken = takeTable(body);
   const cells = taken && { head: taken.head.map(fill), rows: taken.rows.map((r) => r.map(fill)) };
   const table = taken?.flat && cells && tableFits(cells.head, cells.rows) ? { ...taken, ...cells } : null;
   const charts: { index: number; props: Record<string, unknown> }[] = [];
@@ -159,7 +167,7 @@ export function answerCard(
   // The words, as the plain message says them (mentions quieted, every link's address in sight, values included), in
   // one message.
   const said = (markdown: string) => quiet(visibleLinks(fill(markdown)));
-  const before = said(table ? table.before : linked);
+  const before = said(table ? table.before : body);
   const after = table ? said(table.after) : "";
   const tail = quiet(visibleLinks(answerTail(answer).join("\n\n")));
   if ([before, after, tail].join("\n\n").length > MESSAGE_LIMIT) return null;

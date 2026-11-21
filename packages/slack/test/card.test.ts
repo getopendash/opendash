@@ -107,18 +107,30 @@ describe("an answer's card", () => {
     expect(card?.blocks[0]?.text).not.toContain("<!channel>");
   });
 
-  it("leaves a table in the words when a cell holds struck text or a link that hides its address", () => {
+  it("leaves a table in the words when plain cells couldn't say what its cells do", () => {
+    // Struck text, a link (even one whose words hold a pipe), two marked numbers that would run together.
     expect(answerCard(answer("| Plan | Accounts |\n|---|---|\n| Growth | ~~12~~ **14** |"))).toBeNull();
-    // A link in a cell is shown with its address (as the words show links), so the cell says where it goes.
-    const linked = answerCard(answer("| Plan | Docs |\n|---|---|\n| Growth | [guide](https://docs.example/g) |"));
-    expect(((linked?.blocks[0]?.rows ?? []) as { text: string }[][])[1]?.[1]?.text).toBe(
-      "guide (https://docs.example/g)",
-    );
+    expect(answerCard(answer("| Plan | Docs |\n|---|---|\n| Growth | [guide](https://docs.example/g) |"))).toBeNull();
+    expect(
+      answerCard(
+        answer(["| Plan | Accounts |\n|---|---:|\n| [Growth\\|Scale](https://x.example) | ", ref("12"), " |"]),
+      ),
+    ).toBeNull();
+    expect(
+      answerCard(answer(["| Plan | Accounts |\n|---|---|\n| Growth | **", ref("12"), "**_", ref("14"), "_ |"])),
+    ).toBeNull();
+    // A bare address, and a number next to words, read the same as plain text.
+    const fine = answerCard(answer("| Plan | Docs |\n|---|---|\n| **12** plans | https://docs.example/g |"));
+    expect(((fine?.blocks[0]?.rows ?? []) as { text: string }[][])[1]?.map((c) => c.text)).toEqual([
+      "12 plans",
+      "https://docs.example/g",
+    ]);
   });
 
-  it("shows a reference link's address before the table when its definition comes after it", () => {
-    const card = answerCard(answer(`See [the guide][g].\n\n${TABLE}\n\n[g]: https://docs.example/g`));
-    expect(card?.blocks[0]?.text).toBe("See the guide (https://docs.example/g).");
+  it("is today's message when a link uses a definition, or the text holds a placeholder's own characters", () => {
+    expect(answerCard(answer(`See [the guide][g].\n\n${TABLE}\n\n[g]: https://docs.example/g`))).toBeNull();
+    expect(answerCard(answer(TABLE, { caveats: ["See [g].\n\n[g]: https://docs.example/g"] }))).toBeNull();
+    expect(answerCard(answer(["`\uE0000\uE001` ", ref("12"), `\n\n${TABLE}`]))).toBeNull();
   });
 
   it("keeps an indented block after the table indented", () => {
@@ -231,9 +243,17 @@ describe("a chart as Slack's own", () => {
     expect(usd).toMatchObject({ chart: { yLabel: "USD", series: [{ values: [1234.567, 99] }] } });
   });
 
+  it("leaves a chart drawn on its side as its image", () => {
+    expect(nativeChart(chart({ horizontal: true }))).toBeNull();
+  });
+
   it("never rounds a value away: a tiny share stays above zero, a cent boundary as it is", () => {
     const tiny = nativeChart(chart({ axis: { percent: true, compact: false } }, [0.000001, 0.07]));
     expect(tiny).toMatchObject({ chart: { series: [{ values: [0.0001, 7] }] } });
+    const close = nativeChart(chart({ axis: { percent: true, compact: false } }, [0.1234999999999, 0.1235000000001]));
+    const [a, b] = (close?.chart as { series: { values: number[] }[] } | undefined)?.series[0]?.values ?? [];
+    expect(a).toBeLessThan(12.35);
+    expect(b).toBeGreaterThan(12.35);
     const cents = nativeChart(chart({ axis: { currency: "USD", compact: false } }, [1.005, 2]));
     expect(cents).toMatchObject({ chart: { series: [{ values: [1.005, 2] }] } });
   });

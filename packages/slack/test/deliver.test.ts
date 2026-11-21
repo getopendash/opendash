@@ -293,8 +293,15 @@ describe("a run's reply in Slack", () => {
     await s.t.owner`insert into app.query_run (id, org_id, connection_id, requester_type, requester_id, mode, path,
         engine, title, compiled_sql, sql_hash, status, rows, truncated, result_schema, preview, sanity, created_at)
       values (${queryRunId}, ${s.orgId}, ${s.connectionId}, 'run', ${q.runId}, 'execute', 'raw_sql', 'agent_sql', 'Plans',
-        'select name from plans', 'h', 'succeeded', 2, false, ${s.t.owner.json([{ name: "name", type: "text" }])},
-        ${s.t.owner.json([["Growth"], ["Scale"]])}, '[]'::jsonb, now())`;
+        'select name, accounts from plans', 'h', 'succeeded', 2, false,
+        ${s.t.owner.json([
+          { name: "name", type: "text" },
+          { name: "accounts", type: "integer" },
+        ])},
+        ${s.t.owner.json([
+          ["Growth", 12],
+          ["Scale", 7],
+        ])}, '[]'::jsonb, now())`;
     fake.answer("chat.startStream", () => ({ ok: false, error: "not_allowed" }));
     const calls = from();
     try {
@@ -357,7 +364,20 @@ describe("a run's reply in Slack", () => {
     }[];
     expect(body?.type).toBe("markdown");
     expect(body?.text).toBe("There are **2** plans.");
-    expect(drawn).toMatchObject({ type: "data_visualization", title: "Accounts by plan" });
+    expect(drawn).toMatchObject({
+      type: "data_visualization",
+      title: "Accounts by plan",
+      chart: {
+        series: [
+          {
+            data: [
+              { label: "Growth", value: 12 },
+              { label: "Scale", value: 7 },
+            ],
+          },
+        ],
+      },
+    });
     expect(read).toEqual({ type: "markdown", text: "_All plans_" });
     expect(checked?.elements?.[0]?.text).toBe("Every number checked against its query");
     // The chart is in the answer, so it isn't sent again as an image: the PDF and the CSV.
@@ -528,6 +548,36 @@ describe("a run's reply in Slack", () => {
         expect(pngs(calls)).toEqual(e.images);
       });
     }
+
+    it("posts nothing when a newer attempt took the reply over while this one was falling back", async () => {
+      const q = await question();
+      await q.end(tabled(await cited(q.runId)));
+      // Slack refuses every way of ending the stream, so it falls back to posting the answer; meanwhile a newer attempt
+      // has begun (a deploy), which posts it.
+      fake.answer("chat.stopStream", (a) => (a.metadata ? { ok: false, error: "invalid_blocks" } : null));
+      let sends = 0;
+      const calls = from();
+      try {
+        const got = await deliverSlackReply(
+          {
+            ...deps,
+            checkpoint: async (step) => {
+              if (step !== "sending answer" || ++sends !== 5) return;
+              await s.t.owner`update app.slack_reply set attempt = attempt + 1 where run_id = ${q.runId}`;
+            },
+          },
+          bot,
+          slack,
+          q.job,
+        );
+        expect(got).toBe("skipped");
+      } finally {
+        fake.answer("chat.stopStream", null);
+      }
+      // Four tries at ending the stream (the card, twice; the words, twice), then nothing posted by the older one.
+      expect(calls().filter((c) => c.method === "chat.stopStream" && c.args.metadata)).toHaveLength(4);
+      expect(calls().some((c) => c.method === "chat.postMessage")).toBe(false);
+    });
 
     it("never tries the card again once an earlier attempt marked it refused and stopped before the answer went", async () => {
       const q = await question();

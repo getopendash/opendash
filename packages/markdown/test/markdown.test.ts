@@ -4,6 +4,7 @@
 // of a table's columns hold numbers.
 import { describe, expect, it } from "vitest";
 import {
+  hasDefinitions,
   numericColumns,
   parseMarkdown,
   plainText,
@@ -152,6 +153,14 @@ describe("an answer's first table, taken out", () => {
     });
     expect(takeTable("| A | B |\n|---|---|\n| **1** | https://x.example |")?.flat).toBe(true);
     expect(takeTable("| A |\n|---|\n| ~~12~~ 14 |")?.flat).toBe(false);
+    // Two marked numbers side by side would read as one; a number beside words reads as it does.
+    expect(takeTable(`| A |\n|---|\n| **${ref(0)}**_${ref(1)}_ |`)?.flat).toBe(false);
+    expect(takeTable("| A |\n|---|\n| **12** plans |")?.flat).toBe(true);
+  });
+
+  it("knows when a text defines a link reference another part of it may use", () => {
+    expect(hasDefinitions("See [g].\n\n[g]: https://docs.example/g")).toBe(true);
+    expect(hasDefinitions("See [the guide](https://docs.example/g), [g] or `[g]: x`.")).toBe(false);
   });
 
   it("takes only the first, at the top: one in a list, a quote or code stays where it is", () => {

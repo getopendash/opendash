@@ -480,13 +480,13 @@ class Reply {
     const { orgId, runId } = this.job;
     for (let i = 0; ; i++) {
       const t = tries[i] as (typeof tries)[number];
-      // Marked before it's sent as a card; and before any second try, this attempt still the latest (a newer one may
-      // have posted the answer meanwhile).
+      // Marked before it's sent as a card; and before every send, this attempt still the latest (a newer one may have
+      // posted the answer meanwhile, while this one looked for it in the thread, say).
       if (t.card) await this.ledger(() => this.once(CARD_SENT, async () => null, false));
-      if (i > 0)
-        await this.ledger(() =>
-          this.deps.withTenant(orgId, (tx) => checkSlackReplyAttempt(tx, orgId, runId, this.attempt)),
-        );
+      await this.deps.checkpoint?.("sending answer");
+      await this.ledger(() =>
+        this.deps.withTenant(orgId, (tx) => checkSlackReplyAttempt(tx, orgId, runId, this.attempt)),
+      );
       try {
         return await send(replyBlocks(said, runId, t.feedback, this.remembered, dm), t.card);
       } catch (error) {

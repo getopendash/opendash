@@ -132,8 +132,9 @@ export interface TakenTable {
   head: string[];
   rows: string[][];
   /**
-   * Whether every cell says the same as plain text: false when one holds struck text or a link (`~~12~~ 14` would
-   * read as a current 12; a link would lose where it goes).
+   * Whether every cell says the same as plain text: false when one holds struck text (`~~12~~ 14` would read as a
+   * current 12), a link whose words aren't its address (it would lose where it goes), or two marked pieces that would
+   * run together into one number (`**12**_14_` as 1214).
    */
   flat: boolean;
 }
@@ -158,9 +159,24 @@ export function takeTable(source: string): TakenTable | null {
         (p.kind === "link" && p.href !== null && bare(plainText(p.children).trim()) !== bare(p.href)) ||
         ("children" in p && unsaid(p.children)),
     );
+  // The cell's pieces of text, a new one at every change of mark: where plain text would join two numbers.
+  const pieces = (parts: Inline[], out: string[] = []): string[] => {
+    for (const p of parts) {
+      if (p.kind === "text" || p.kind === "code") out.push(p.text);
+      else if (p.kind === "break") out.push("\n");
+      else pieces(p.children, out);
+    }
+    return out;
+  };
+  const ends = new RegExp(`[\\p{N}${REF_CLOSE}]$`, "u");
+  const starts = new RegExp(`^[\\p{N}${REF_OPEN}]`, "u");
+  const joins = (parts: Inline[]) => {
+    const ps = pieces(parts).filter((t) => t !== "");
+    return ps.some((t, i) => i > 0 && ends.test(ps[i - 1] ?? "") && starts.test(t));
+  };
   const cell = (c: (typeof node.children)[number]["children"][number]) => {
     const parts = inlines(c.children);
-    if (unsaid(parts)) flat = false;
+    if (unsaid(parts) || joins(parts)) flat = false;
     return plainText(parts).trim();
   };
   const [headRow, ...bodyRows] = node.children;
@@ -179,6 +195,14 @@ export function takeTable(source: string): TakenTable | null {
     rows: bodyRows.map(row),
     flat,
   };
+}
+
+/** Whether markdown defines a link reference (`[g]: https://…`), which a link elsewhere in the text may use. */
+export function hasDefinitions(source: string): boolean {
+  const tree = fromMarkdown(source, { extensions: [gfm()], mdastExtensions: [gfmFromMarkdown()] });
+  const found = (n: Nodes): boolean =>
+    n.type === "definition" || ("children" in n && (n.children as Nodes[]).some(found));
+  return found(tree);
 }
 
 /** Inline parts as plain text: marks dropped, a break a newline (for a cell's alignment, a caveat's chip). */
