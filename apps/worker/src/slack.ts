@@ -12,6 +12,7 @@ import {
   type SecretStore,
   type SlackFilesJob,
   type SlackReplyJob,
+  slackFilesDeadLetter,
   slackFilesQueue,
   slackInboundDeadLetter,
   slackInboundQueue,
@@ -22,6 +23,7 @@ import {
 import { withPublic, withSystem, withTenant } from "@opendash/db";
 import { emailLinkOrigin } from "@opendash/email";
 import {
+  abandonSlackFile,
   abandonSlackReply,
   createSlackBot,
   deliverSlackFile,
@@ -137,6 +139,12 @@ export async function startSlack(ctx: {
     if (!job) return;
     const status = await deliverSlackFile({ ...deps, log: ctx.log }, bot, slack, job.data);
     ctx.log("slack file", { runId: job.data.runId, file: job.data.file.startsWith("csv:") ? "csv" : "pdf", status });
+  });
+  // A file the queue gave up on: its asker told privately it wasn't made, so a pick never comes to nothing.
+  await ctx.boss.work<SlackFilesJob>(slackFilesDeadLetter.name, async ([job]) => {
+    if (!job) return;
+    const told = await abandonSlackFile({ ...deps, log: ctx.log }, bot, slack, job.data);
+    ctx.log("slack file failed", { runId: job.data.runId, told });
   });
   // The queue gave up on it: the person is told where the answer is, if the reply is still unfinished.
   await ctx.boss.work<SlackReplyJob>(slackReplyDeadLetter.name, async ([job]) => {

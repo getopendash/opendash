@@ -15,6 +15,7 @@ import { withPublicOn, withTenantOn } from "@opendash/db/testing";
 import type { Chat } from "chat";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import {
+  abandonSlackFile,
   abandonSlackReply,
   addressed,
   createSlackBot,
@@ -396,6 +397,11 @@ describe("a run's reply in Slack", () => {
     expect(await deliverSlackFile(deps, bot, slack, { ...q.job, file: queryFile })).toBe("done");
     // Only a query the answer cites.
     expect(await deliverSlackFile(deps, bot, slack, { ...q.job, file: `csv:${uuidv7()}` })).toBe("skipped");
+    // One the queue gave up on: its asker told so, privately, in the answer's thread.
+    expect(await abandonSlackFile(deps, bot, slack, { ...q.job, file: "pdf" })).toBe(true);
+    const [sorry] = files().filter((c) => c.method === "chat.postEphemeral");
+    expect(sorry?.args).toMatchObject({ channel: "C0REV", user: "UPRIYA", thread_ts: q.ts });
+    expect(String(sorry?.args.text)).toContain("I couldn't make the PDF.");
     expect(
       files()
         .filter((c) => c.method === "files.getUploadURLExternal")

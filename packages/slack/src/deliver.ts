@@ -49,6 +49,7 @@ import type { Chat } from "chat";
 import { askBlocks, buttonText, spelledOut } from "./ask";
 import { optionAction } from "./bot";
 import { type AnswerCard, answerCard, chartMessages } from "./card";
+import { tellPrivately } from "./privately";
 import { cardsAfter, failureCode, READING, type StreamClient, slackError, slackRefusal, taskCards } from "./progress";
 import {
   cardCsv,
@@ -401,6 +402,36 @@ export async function deliverSlackFile(
     { installationId: target.teamId },
   );
   return "done";
+}
+
+/**
+ * A file the queue gave up on (its dead letter): its asker told privately, in the answer's thread, that it wasn't made,
+ * so a pick never comes to nothing. False: nobody to tell (they left, or Slack took the app back).
+ */
+export async function abandonSlackFile(
+  deps: DeliverDeps,
+  bot: Chat,
+  slack: SlackAdapter,
+  job: SlackFilesJob,
+): Promise<boolean> {
+  const target = await deps.withTenant(job.orgId, (tx) => slackReplyOf(tx, job.orgId, job.runId));
+  if (!target?.userId || !target.linked) return false;
+  const workspace = await slackBotToken(deps, target.teamId);
+  if (!workspace?.token) return false;
+  const which = job.file === "pdf" ? "the PDF" : "that CSV";
+  await slack.withBotToken(
+    workspace.token,
+    // The answer is in the thread, so the thread is shown: said there, to the asker only.
+    () =>
+      tellPrivately(
+        bot.thread(target.slackThreadId),
+        target.slackUserId,
+        `I couldn't make ${which}. Pick it again from Download, or get it from the answer in OpenDash.`,
+        true,
+      ),
+    { installationId: target.teamId },
+  );
+  return true;
 }
 
 /**

@@ -8,6 +8,7 @@ export {
   type SlackBotDeps,
 } from "./bot";
 export {
+  abandonSlackFile,
   abandonSlackReply,
   addressed,
   type DeliverDeps,
