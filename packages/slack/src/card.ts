@@ -1,0 +1,269 @@
+/**
+ * An answer in Slack's own elements: its first table as Slack's own table (sortable, a page at a time) and its charts as
+ * Slack's own charts, two in the answer's message and the rest two a message after it, instead of a Markdown table and
+ * images. Only what Slack can't draw as the page does stays as before: a table as Markdown in the words, a chart as its
+ * image. Built from the answer only: the words are its own (cut around the table where the parser found it, never
+ * rewritten), the table's cells are its cells with each value as the gate shows it, a chart's points are the gate's
+ * cells. The model writes nothing here. The table is read from the answer's segments with each reference a
+ * placeholder, as the page and the PDF read it: a value (a name with a `|` in it, say) is never parsed as Markdown, so
+ * it can't move a number into another column. The table and charts go through json-render (`toCard`, its limits
+ * refusing what Slack would degrade) and the Slack adapter's `cardToBlockKit`; the words stay Slack `markdown` blocks.
+ *
+ * No card (today's message) for an answer too long for one message, one with nothing Slack can draw, or one the
+ * converter didn't turn into exactly the blocks asked for. Pure, for tests.
+ */
+import { cardToBlockKit, type SlackCardElement } from "@chat-adapter/slack/blocks";
+import { type CardLimits, toCard } from "@json-render/chat";
+import type { Spec } from "@json-render/core";
+import type { AnswerSegment, ResolvedChart, RunOutcome } from "@opendash/core";
+import { hasDefinitions, REF_CLOSE, REF_OPEN, takeTable, visibleLinks } from "@opendash/markdown";
+import { hasNumbers, MESSAGE_LIMIT, quiet } from "./reply";
+
+type Answer = Extract<RunOutcome, { kind: "answer" }>;
+type Block = Record<string, unknown>;
+
+/** Slack's limits for its own tables and charts, as the adapter knows them (past them it degrades to a code block). */
+const SLACK = {
+  tableRows: 100,
+  tableColumns: 20,
+  tableChars: 10_000,
+  charts: 2,
+  chartTitle: 50,
+  chartLabel: 20,
+  chartPoints: 20,
+  chartSeries: 12,
+} as const;
+
+const LIMITS: CardLimits = {
+  tables: 1,
+  charts: SLACK.charts,
+  tableRows: SLACK.tableRows,
+  tableColumns: SLACK.tableColumns,
+  chartTitle: SLACK.chartTitle,
+  chartLabel: SLACK.chartLabel,
+  chartPoints: SLACK.chartPoints,
+  chartSeries: SLACK.chartSeries,
+};
+
+/** Rows a table shows a page at a time (Slack's default is 5). */
+export const TABLE_PAGE = 10;
+
+export interface AnswerCard {
+  /** The answer's message as blocks: its words, its table where it was, its first two charts. */
+  blocks: Block[];
+  /** Which of the answer's charts (by index) the card draws: the rest go after it (`chartMessages`). */
+  charts: number[];
+}
+
+/** Text cut to Slack's length (counted as Slack counts it), never inside a character, with an ellipsis. */
+export function shorten(text: string, max: number): string {
+  const clean = text.replace(/\s+/g, " ").trim();
+  if (clean.length <= max) return clean;
+  let out = "";
+  for (const ch of clean) {
+    if (out.length + ch.length > max - 1) break;
+    out += ch;
+  }
+  return `${out.trimEnd()}…`;
+}
+
+/**
+ * A number a hundred times over, by moving its decimal point (0.07 → 7, where × 100 gives 7.000000000000001), so two
+ * values that differ still differ. A number written with an exponent is multiplied.
+ */
+export function hundredfold(v: number): number {
+  const text = String(v);
+  const m = /^(-?)(\d+)(?:\.(\d+))?$/.exec(text);
+  if (!m) return v * 100;
+  const [, sign, whole, fraction = ""] = m;
+  const digits = `${whole}${fraction.padEnd(2, "0")}`;
+  const point = (whole ?? "").length + 2;
+  return Number(`${sign}${digits.slice(0, point)}.${digits.slice(point) || "0"}`);
+}
+
+/** Labels cut to Slack's length, or null when cutting makes two of them the same (a chart Slack can't tell apart). */
+const labels = (names: string[]): string[] | null => {
+  const cut = names.map((n) => shorten(n, SLACK.chartLabel));
+  return cut.every((c) => c.length > 0) && new Set(cut).size === cut.length ? cut : null;
+};
+
+/**
+ * A chart's props for Slack's own chart, or null when Slack can't draw it as the page does: more points than it takes,
+ * a gap in a series (never drawn as zero), labels that can't be told apart once cut. Slack's axes show raw numbers,
+ * so a percentage is scaled to what its labels say (0.061 → 6.1, the axis "%"), and the currency named on the axis;
+ * values are never rounded.
+ */
+export function nativeChart(chart: ResolvedChart): Record<string, unknown> | null {
+  const { categories, series, axis } = chart;
+  // Slack's bars stand up: a chart the page draws on its side (a ranking, usually) stands up too. Its bars and values are
+  // the same; only which way they point differs.
+  if (!categories.length || categories.length > SLACK.chartPoints) return null;
+  if (!series.length || series.length > SLACK.chartSeries) return null;
+  if (series.some((s) => s.points.length !== categories.length || s.points.some((p) => p === null))) return null;
+  const cats = labels(categories);
+  const names = labels(series.map((s) => s.name));
+  const title = shorten(chart.title, SLACK.chartTitle);
+  if (!cats || !names || !title) return null;
+  // The value itself, never rounded (a tiny share stays above zero); a percentage in the units its labels use.
+  const value = (v: number) => (axis.percent ? hundredfold(v) : v);
+  const values = series.map((s) => s.points.map((p) => value(p?.value ?? 0)));
+  if (values.some((vs) => vs.some((v) => !Number.isFinite(v)))) return null;
+  const yLabel = axis.percent ? "%" : axis.currency ? axis.currency : undefined;
+  return {
+    title,
+    chart: {
+      type: chart.type,
+      categories: cats,
+      series: series.map((_, i) => ({ name: names[i], values: values[i] })),
+      ...(yLabel ? { yLabel } : {}),
+    },
+  };
+}
+
+const PLACEHOLDER = new RegExp(`${REF_OPEN}(\\d+)${REF_CLOSE}`, "g");
+
+/** Segments as markdown with each reference a placeholder, and what each stands for (as the PDF reads them). */
+function withPlaceholders(segments: AnswerSegment[]): { source: string; fill: (text: string) => string } {
+  const displays: string[] = [];
+  const source = segments
+    .map((s) => {
+      if (!("ref" in s)) return s.text;
+      displays.push(s.display);
+      return `${REF_OPEN}${displays.length - 1}${REF_CLOSE}`;
+    })
+    .join("");
+  return { source, fill: (text) => text.replace(PLACEHOLDER, (_m, i: string) => displays[Number(i)] ?? "") };
+}
+
+/** Whether a table fits Slack's own: at least a row, and within its rows, columns and characters. */
+const tableFits = (head: string[], rows: string[][]) =>
+  head.length > 0 &&
+  head.length <= SLACK.tableColumns &&
+  rows.length > 0 &&
+  rows.length + 1 <= SLACK.tableRows &&
+  [head, ...rows].flat().reduce((n, c) => n + c.length, 0) <= SLACK.tableChars;
+
+/** The answer's charts Slack can draw as its own, in order: a second whose title reads the same once cut is left out. */
+function natives(answer: Answer): { index: number; props: Record<string, unknown> }[] {
+  const found: { index: number; props: Record<string, unknown> }[] = [];
+  for (const [index, chart] of (answer.charts ?? []).entries()) {
+    const props = nativeChart(chart);
+    if (props && !found.some((c) => c.props.title === props.title)) found.push({ index, props });
+  }
+  return found;
+}
+
+/**
+ * A table and charts as Slack's own blocks, through one json-render spec of literal props (no state, no expressions),
+ * in order; null unless the adapter made exactly the blocks asked for (it turns what Slack can't draw into a code
+ * block rather than refusing it).
+ */
+function slackBlocks(
+  table: { head: string[]; rows: string[][] } | null,
+  charts: { props: Record<string, unknown> }[],
+): Block[] | null {
+  const elements: Spec["elements"] = {};
+  const order: string[] = [];
+  if (table) {
+    elements.table = {
+      type: "Table",
+      props: { headers: table.head.map((h) => quiet(h)), rows: table.rows.map((r) => r.map((c) => quiet(c))) },
+      children: [],
+    };
+    order.push("table");
+  }
+  for (const [i, c] of charts.entries()) {
+    elements[`chart${i}`] = { type: "Chart", props: c.props, children: [] };
+    order.push(`chart${i}`);
+  }
+  elements.card = { type: "Card", props: {}, children: order };
+  let converted: Block[];
+  try {
+    const card = toCard({ root: "card", elements, state: {} }, { limits: LIMITS });
+    // Text as it is: the adapter would otherwise turn a literal `{{emoji:x}}` in a cell or a title into an emoji.
+    converted = cardToBlockKit(card as unknown as SlackCardElement, { convertEmoji: (text) => text }) as Block[];
+  } catch {
+    return null;
+  }
+  const kinds = converted.map((b) => b.type);
+  const want = [...(table ? ["data_table"] : []), ...charts.map(() => "data_visualization")];
+  if (kinds.length !== want.length || kinds.some((k, i) => k !== want[i])) return null;
+  if (table && converted[0]) converted[0].page_size = Math.min(table.rows.length, TABLE_PAGE);
+  return converted;
+}
+
+/**
+ * The answer as a card, or null for today's message. `address` puts the asker's mention at its start (a channel's
+ * thread holding someone else's conversation too), as the plain message's first line has it. One that didn't pass
+ * every check is a card too: what was checked says so under it, as the page draws its charts all the same.
+ */
+export function answerCard(
+  outcome: RunOutcome | null | undefined,
+  address?: (markdown: string) => string,
+): AnswerCard | null {
+  const answer: Answer | null = outcome?.kind === "answer" ? outcome : null;
+  if (answer?.status !== "answered" || !hasNumbers(answer)) return null;
+  // An older answer has no segments to read its table from safely: today's message.
+  if (!answer.segments) return null;
+  const segments = answer.segments.markdown;
+  // Text that holds a placeholder's own characters, or an entity the parse turns into one, could take a value that
+  // isn't its own: today's message.
+  const marker = /&#(?:x0*e00[01]|0*5734[45]);/i;
+  if (
+    segments.some(
+      (s) => !("ref" in s) && (s.text.includes(REF_OPEN) || s.text.includes(REF_CLOSE) || marker.test(s.text)),
+    )
+  )
+    return null;
+  // The table is read from the answer as written, each value a placeholder, so nothing in a value or a link can move
+  // a cell; the values go back in after the parse.
+  const { source, fill } = withPlaceholders(segments);
+  const body = source.trim();
+  // A link that uses a definition elsewhere (`[g]: https://…`) is shown with its address only when the whole reply is
+  // read at once, as today's message reads it: that one, then.
+  if ([body, ...answer.interpretation, ...answer.caveats].some(hasDefinitions)) return null;
+  const taken = takeTable(body);
+  const cells = taken && { head: taken.head.map(fill), rows: taken.rows.map((r) => r.map(fill)) };
+  const table = taken?.flat && cells && tableFits(cells.head, cells.rows) ? { ...taken, ...cells } : null;
+  const charts = natives(answer).slice(0, SLACK.charts);
+  if (!table && !charts.length) return null;
+
+  // The words, as the plain message says them (mentions quieted, every link's address in sight, values included), in
+  // one message. How it read the question and its caveats go under them, as for every answer (`replyBlocks`).
+  const said = (markdown: string) => quiet(visibleLinks(fill(markdown)));
+  const before = said(table ? table.before : body);
+  const after = table ? said(table.after) : "";
+  if ([before, after].join("\n\n").length > MESSAGE_LIMIT) return null;
+  const lead = address ? address(before) : before;
+  const converted = slackBlocks(table, charts);
+  if (!converted) return null;
+  const tableBlock = table ? converted[0] : undefined;
+  const chartBlocks = table ? converted.slice(1) : converted;
+  const md = (text: string): Block[] => (text.trim() ? [{ type: "markdown", text }] : []);
+  return {
+    blocks: [...md(lead), ...(tableBlock ? [tableBlock] : []), ...md(after), ...chartBlocks],
+    charts: charts.map((c) => c.index),
+  };
+}
+
+/**
+ * The answer's charts its card didn't draw (`drawn`): Slack's own where it can draw them, two a message (its limit),
+ * and the rest as images (`images`, by index): more points than Slack takes, a gap, labels it can't tell apart.
+ */
+export function chartMessages(
+  outcome: RunOutcome | null | undefined,
+  drawn: number[],
+): { messages: { blocks: Block[]; charts: number[] }[]; images: number[] } {
+  const answer: Answer | null = outcome?.kind === "answer" ? outcome : null;
+  const all = (answer?.charts ?? []).map((_, i) => i).filter((i) => !drawn.includes(i));
+  if (!answer) return { messages: [], images: [] };
+  const left = natives(answer).filter((c) => !drawn.includes(c.index));
+  const messages: { blocks: Block[]; charts: number[] }[] = [];
+  for (let at = 0; at < left.length; at += SLACK.charts) {
+    const group = left.slice(at, at + SLACK.charts);
+    const blocks = slackBlocks(null, group);
+    if (blocks) messages.push({ blocks, charts: group.map((c) => c.index) });
+  }
+  const native = new Set(messages.flatMap((m) => m.charts));
+  return { messages, images: all.filter((i) => !native.has(i)) };
+}

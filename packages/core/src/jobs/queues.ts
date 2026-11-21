@@ -654,6 +654,32 @@ export const slackReplyQueue = define<SlackReplyJob>("slack.reply", {
 });
 
 /**
+ * slack.files: a file under a Slack answer, asked for from its Download menu (the answer as a PDF, or a cited query's
+ * rows as CSV), posted in its thread. Ids only: where it goes is the reply's row. Tried once: a retry after the file
+ * went would send it twice, and the menu is there to ask again.
+ */
+export interface SlackFilesJob {
+  orgId: string;
+  runId: string;
+  /** The answer as a PDF, or the rows of one query it cites (its query run). */
+  file: "pdf" | `csv:${string}`;
+}
+
+export const slackFilesDeadLetter = define<SlackFilesJob>("slack.files.dlq", {
+  policy: "standard",
+  retryLimit: 0,
+  deleteAfterSeconds: 7 * 24 * 3600,
+});
+
+export const slackFilesQueue = define<SlackFilesJob>("slack.files", {
+  policy: "standard",
+  retryLimit: 0,
+  expireInSeconds: 300,
+  deadLetter: slackFilesDeadLetter.name,
+  deleteAfterSeconds: 2 * 24 * 3600,
+});
+
+/**
  * slack.inbound.check: every minute, the questions from Slack nothing handled in time, handed to the bot
  * again (or, past their last try, the person told). One at a time; a missed minute is caught up by the next.
  */
@@ -803,6 +829,8 @@ export const QUEUES: QueueDefinition<unknown>[] = [
   usageRollupQueue,
   slackReplyDeadLetter,
   slackReplyQueue,
+  slackFilesDeadLetter,
+  slackFilesQueue,
   slackInboundDeadLetter,
   slackInboundQueue,
   learningDispatchDeadLetter,

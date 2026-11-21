@@ -3,7 +3,17 @@
 // table cells; where it reads differently from the hand-written readers it replaced, the reading we keep; and which
 // of a table's columns hold numbers.
 import { describe, expect, it } from "vitest";
-import { numericColumns, parseMarkdown, plainText, REF_CLOSE, REF_OPEN, safeHref, visibleLinks } from "../src";
+import {
+  hasDefinitions,
+  numericColumns,
+  parseMarkdown,
+  plainText,
+  REF_CLOSE,
+  REF_OPEN,
+  safeHref,
+  takeTable,
+  visibleLinks,
+} from "../src";
 
 const ref = (i: number) => `${REF_OPEN}${i}${REF_CLOSE}`;
 const text = (t: string) => ({ kind: "text", text: t });
@@ -122,6 +132,50 @@ describe("an answer's markdown", () => {
     expect(visibleLinks("- [c]: https://x.test/d")).toBe("- ");
     // Link syntax no parser here took as a link is broken up; code is left as written.
     expect(visibleLinks("odd ](https://x.test) and `[k](v)`")).toBe("odd ] (https://x.test) and `[k](v)`");
+  });
+});
+
+describe("an answer's first table, taken out", () => {
+  it("cuts it where the parser found it, the words around it as written, its cells as text as wide as its header", () => {
+    const source =
+      "There are **2** plans:\n\n| Plan | Accounts |\n|:--|--:|\n| **Growth** | 12 |\n| [Scale](https://x.example) |\n\nGrowth _leads_.";
+    expect(takeTable(source)).toEqual({
+      before: "There are **2** plans:",
+      after: "Growth _leads_.",
+      align: ["left", "right"],
+      head: ["Plan", "Accounts"],
+      rows: [
+        ["Growth", "12"],
+        ["Scale", ""],
+      ],
+      // A link whose words aren't its address: plain text would lose where it goes.
+      flat: false,
+    });
+    expect(takeTable("| A | B |\n|---|---|\n| **1** | https://x.example |")?.flat).toBe(true);
+    expect(takeTable("| A |\n|---|\n| ~~12~~ 14 |")?.flat).toBe(false);
+    // Two marked numbers side by side would read as one; a number beside words reads as it does.
+    expect(takeTable(`| A |\n|---|\n| **${ref(0)}**_${ref(1)}_ |`)?.flat).toBe(false);
+    expect(takeTable("| A |\n|---|\n| **12** plans |")?.flat).toBe(true);
+    // A value right beside another, even unmarked; a relative link or an image (their address dropped); a row wider
+    // than its header (a Slack link's `|` taken for a column, its last cell lost).
+    expect(takeTable(`| A |\n|---|\n| ${ref(0)}${ref(1)} |`)?.flat).toBe(false);
+    expect(takeTable("| A |\n|---|\n| [details](/orders/12) |")?.flat).toBe(false);
+    expect(takeTable("| A |\n|---|\n| ![chart](https://x.example/12.png) |")?.flat).toBe(false);
+    expect(takeTable("| Plan | N |\n|---|---|\n| <https://x.example/p|Growth> | 12 |")?.flat).toBe(false);
+  });
+
+  it("knows when a text defines a link reference another part of it may use", () => {
+    expect(hasDefinitions("See [g].\n\n[g]: https://docs.example/g")).toBe(true);
+    expect(hasDefinitions("See [the guide](https://docs.example/g), [g] or `[g]: x`.")).toBe(false);
+  });
+
+  it("takes only the first, at the top: one in a list, a quote or code stays where it is", () => {
+    const second = "| A |\n|---|\n| 1 |\n\n| B |\n|---|\n| 2 |";
+    expect(takeTable(second)).toMatchObject({ before: "", head: ["A"], after: "| B |\n|---|\n| 2 |" });
+    expect(takeTable("- list:\n\n  | A |\n  |---|\n  | 1 |")).toBeNull();
+    expect(takeTable("> | A |\n> |---|\n> | 1 |")).toBeNull();
+    expect(takeTable("```\n| A |\n|---|\n| 1 |\n```")).toBeNull();
+    expect(takeTable("No table, 2 plans.")).toBeNull();
   });
 });
 

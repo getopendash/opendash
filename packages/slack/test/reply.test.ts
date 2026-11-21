@@ -9,6 +9,8 @@ import {
   cardCsv,
   chartAltText,
   csvCell,
+  downloadsOf,
+  fileSources,
   MAX_MESSAGES,
   MEMORY_UNDO,
   pdfAnswer,
@@ -86,21 +88,17 @@ describe("the answer as Slack text", () => {
     problems: [],
   };
 
-  it("has the answer, how it read the question, its caveats; under it, that it's verified, and the way to where from", () => {
+  it("has the answer; under it, how it read the question, its caveats, that it's verified, and the way to where from", () => {
     expect(replyText({ ...answer, next: ["MRR by plan?", "  "] } as RunOutcome, "succeeded", url)).toEqual({
-      messages: [
-        [
-          "MRR was **$412.6k** in September 2026, up **4.2%**.",
-          "_Paid accounts · Sep 2026 vs Aug 2026_",
-          "> September closed on Oct 1.",
-        ].join("\n\n"),
-      ],
-      footer: "Verified from definitions an admin approved",
+      messages: ["MRR was **$412.6k** in September 2026, up **4.2%**."],
+      footer: "✅ Verified from definitions an admin approved",
       open: { label: "See where each number comes from", url },
       next: ["MRR by plan?"],
       rate: true,
       cited: ["q-1", "q-2"],
       answered: true,
+      context: { reading: "Paid accounts · Sep 2026 vs Aug 2026", caveats: ["September closed on Oct 1."] },
+      downloads: [],
     });
     const unverified = replyText(
       { ...answer, verified: false, problems: ["A number wasn't traced."] },
@@ -108,18 +106,77 @@ describe("the answer as Slack text", () => {
       url,
     );
     expect(unverified).toMatchObject({
-      footer: "Unverified: A number wasn't traced",
+      footer: "⚠️ Unverified: A number wasn't traced",
       open: { label: "Open in OpenDash", url },
     });
   });
 
+  it("says a caveat as Markdown when a plain line would say it otherwise, or there are many", () => {
+    const said = replyText(answer, "succeeded", url);
+    const struck = replyBlocks({ ...said, context: { reading: null, caveats: ["Was ~~12~~ 14 accounts."] } }, "r");
+    expect(struck[0]).toEqual({ type: "markdown", text: "> Was ~~12~~ 14 accounts." });
+    const joined = replyBlocks({ ...said, context: { reading: "**12**_14_", caveats: [] } }, "r");
+    expect(joined[0]).toMatchObject({ type: "markdown" });
+    const many = replyBlocks({ ...said, context: { reading: null, caveats: ["a", "b", "c", "d", "e", "f"] } }, "r");
+    expect(many[0]).toEqual({ type: "markdown", text: "> a\n\n> b\n\n> c\n\n> d\n\n> e\n\n> f" });
+    expect(many.filter((b) => b.type === "context")).toHaveLength(1);
+  });
+
+  it("offers the answer's files to download: its PDF, then each cited query with rows", () => {
+    const cards = [
+      { id: "q-1", title: "MRR by month", preview: [[1]] },
+      { id: "q-2", title: "Nothing back", preview: [] },
+    ];
+    expect(downloadsOf("run-1", answer, cards)).toEqual([
+      { label: "PDF of this answer", value: JSON.stringify({ r: "run-1", f: "pdf" }) },
+      { label: "CSV: MRR by month", value: JSON.stringify({ r: "run-1", q: "q-1" }) },
+    ]);
+    // No PDF for a reply with no numbers; at most `max` queries.
+    expect(downloadsOf("run-1", { kind: "no_answer", reason: "No data." }, [])).toEqual([]);
+    const many = Array.from({ length: 12 }, (_, i) => ({ id: `q-${i}`, title: `Q${i}`, preview: [[1]] }));
+    expect(downloadsOf("run-1", answer, many)).toHaveLength(11);
+    // A query a chart was drawn from is one of its files too.
+    const point = (queryRunId: string) => ({
+      value: 1,
+      display: "1",
+      cell: { alias: "q9", queryRunId, row: 0, column: "n" },
+    });
+    const charted = {
+      ...answer,
+      charts: [
+        {
+          type: "bar",
+          title: "T",
+          horizontal: false,
+          axis: { compact: true },
+          categories: ["a"],
+          series: [{ name: "n", points: [point("q-9")] }],
+        },
+      ],
+    } as RunOutcome;
+    expect(fileSources(charted)).toEqual(["q-1", "q-2", "q-9"]);
+  });
+
   it("puts under it a quiet line, the way into OpenDash and its follow-ups, and 👍/👎 (Slack's own, or plain ones)", () => {
     const said = replyText({ ...answer, next: ["MRR by plan?"] } as RunOutcome, "succeeded", url);
-    const blocks = replyBlocks(said, "run-1");
+    const blocks = replyBlocks(
+      { ...said, downloads: [{ label: "PDF of this answer", value: '{"r":"run-1","f":"pdf"}' }] },
+      "run-1",
+    );
     expect(blocks).toEqual([
+      // How it read the question, its caveat, a line, then what was checked: quiet plain text.
       {
         type: "context",
-        elements: [{ type: "plain_text", text: "Verified from definitions an admin approved", emoji: false }],
+        elements: [{ type: "plain_text", text: "Paid accounts · Sep 2026 vs Aug 2026", emoji: true }],
+      },
+      {
+        type: "context",
+        elements: [{ type: "plain_text", text: "ℹ️ September closed on Oct 1.", emoji: true }],
+      },
+      { type: "divider" },
+      {
+        type: "context",
+        elements: [{ type: "plain_text", text: "✅ Verified from definitions an admin approved", emoji: true }],
       },
       {
         type: "actions",
@@ -135,6 +192,18 @@ describe("the answer as Slack text", () => {
             action_id: "opendash:next:0",
             text: { type: "plain_text", text: "MRR by plan?", emoji: true },
             value: JSON.stringify({ r: "run-1", i: 0 }),
+          },
+          // Its files only when asked for, from a menu.
+          {
+            type: "static_select",
+            action_id: "opendash:download",
+            placeholder: { type: "plain_text", text: "Download", emoji: true },
+            options: [
+              {
+                text: { type: "plain_text", text: "PDF of this answer", emoji: true },
+                value: '{"r":"run-1","f":"pdf"}',
+              },
+            ],
           },
         ],
       },
@@ -184,6 +253,8 @@ describe("the answer as Slack text", () => {
       rate: true,
       cited: [],
       answered: true,
+      context: { reading: null, caveats: [] },
+      downloads: [],
     });
     // Nor is it drawn as a PDF.
     expect(pdfAnswer(hello)).toBeNull();
@@ -193,7 +264,7 @@ describe("the answer as Slack text", () => {
       "succeeded",
       url,
     );
-    expect(unchecked.footer).toBe("Unverified: A number in the text isn't from a query");
+    expect(unchecked.footer).toBe("⚠️ Unverified: A number in the text isn't from a query");
   });
 
   it("draws a PDF only of an answer that answered, with numbers in it", () => {
@@ -222,6 +293,8 @@ describe("the answer as Slack text", () => {
         questions: [one],
         cited: [],
         answered: true,
+        context: { reading: null, caveats: [] },
+        downloads: [],
       });
     }
     const two = [one, { question: "Which window?", options: ["Last year", "This year"], multiple: true }];

@@ -17,6 +17,7 @@ import type { SlackAdapter } from "@chat-adapter/slack";
 import {
   answerAbout,
   beginSlackReplyAttempt,
+  checkSlackReplyAttempt,
   claimSlackReplyPart,
   finishSlackReplyAttempt,
   getQueryCard,
@@ -30,25 +31,32 @@ import {
   type SecretStore,
   SLACK_FOR_GOOD,
   SLACK_REPLY_FAILURES,
+  type SlackFilesJob,
   SlackReplyFenced,
   type SlackReplyJob,
   slackBotToken,
   slackReplyFailed,
   slackReplyOf,
+  slackReplyPartBegun,
   slackReplyPartPosted,
   slackReplySteps,
   slackReplyStepsAt,
 } from "@opendash/core";
 import type { PublicTx, TenantTx } from "@opendash/db";
+import { visibleLinks } from "@opendash/markdown";
 import { answerBlocks, chartPng, packageFontDir, pdfFileName, renderPdf } from "@opendash/pdf";
 import type { Chat } from "chat";
 import { askBlocks, buttonText, spelledOut } from "./ask";
 import { optionAction } from "./bot";
-import { cardsAfter, failureCode, READING, type StreamClient, slackError, taskCards } from "./progress";
+import { type AnswerCard, answerCard, chartMessages } from "./card";
+import { tellPrivately } from "./privately";
+import { cardsAfter, failureCode, READING, type StreamClient, slackError, slackRefusal, taskCards } from "./progress";
 import {
   cardCsv,
   chartAltText,
+  downloadsOf,
   type Event,
+  fileSources,
   fileStem,
   pdfAnswer,
   quiet,
@@ -97,11 +105,31 @@ export class SlackReplyUnlinked extends Error {
 /** Slack's refusals that no retry changes (the token gone, or the place to reply): the reply ends there. */
 const FOR_GOOD = SLACK_FOR_GOOD;
 
+/**
+ * Slack's answers that don't say the message wasn't taken (it may have been, before the error) or say to wait: never
+ * a reason to send it again another way. The stream's end is looked for in the thread first; a post is the job's to
+ * retry, which looks first too.
+ */
+const UNSURE = new Set(["internal_error", "fatal_error", "service_unavailable", "request_timeout", "ratelimited"]);
+
 /** Slack refusing a message's blocks: tried again with the plain ones. */
 const REFUSED_BLOCKS = new Set(["invalid_blocks", "invalid_blocks_format", "invalid_arguments"]);
 
 /** What a reply's parts are marked with in Slack (its message metadata): the run and the part, nothing said. */
 export const REPLY_EVENT = "opendash_reply";
+
+/**
+ * The marks a reply leaves about its answer's card, each made before the send it's about: `card`, the answer was sent
+ * as a card (so its charts aren't sent again as images); `card_refused`, Slack refused it, and the answer goes, and
+ * goes again in any later attempt, without one (every chart an image). An answer with neither went as today's message.
+ */
+export const CARD_SENT = "card";
+export const CARD_REFUSED = "card_refused";
+
+/** The reply's own records failing while it sends the answer: never taken for Slack refusing it, so the job retries. */
+class ReplyLedgerError extends Error {
+  override name = "ReplyLedgerError";
+}
 
 const sleep = (ms: number, signal?: AbortSignal) =>
   new Promise<void>((resolve) => {
@@ -243,7 +271,6 @@ const gaveUpText = (url: string) => `I couldn't finish replying here. The answer
 /** Delivers a run's reply. "skipped": nothing to send (not from Slack, finished already, or another attempt has it). */
 export async function deliverSlackReply(
   deps: DeliverDeps,
-  bot: Chat,
   slack: SlackAdapter,
   job: SlackReplyJob,
   signal?: AbortSignal,
@@ -267,7 +294,7 @@ export async function deliverSlackReply(
     await finish("failed").catch(() => {});
     return "skipped";
   }
-  const reply = new Reply(deps, bot, slack, job, { ...target, userId: target.userId }, attempt, workspace.botUserId);
+  const reply = new Reply(deps, slack, job, { ...target, userId: target.userId }, attempt, workspace.botUserId);
   // Scoped to the workspace, so the adapter's cached profiles of one workspace never answer for another's.
   const scoped = (fn: () => Promise<void>) => slack.withBotToken(token, fn, { installationId: target.teamId });
   try {
@@ -298,15 +325,120 @@ export async function deliverSlackReply(
 }
 
 /**
- * The last word on a reply the queue gave up on (its dead letter): the person told where the answer is, if the reply
- * is still unfinished.
+ * An answer's queries, as its asker sees them in OpenDash (query cards): those that ran. One that can't be read is left
+ * out: a file is never worth the answer.
  */
-export async function abandonSlackReply(
+async function citedCards(
+  deps: Pick<DeliverDeps, "withTenant">,
+  viewer: { orgId: string; userId: string },
+  ids: string[],
+): Promise<QueryCard[]> {
+  const read = await Promise.allSettled(
+    ids.slice(0, 20).map((id) => getQueryCard({ withTenant: deps.withTenant }, viewer, id)),
+  );
+  return read.flatMap((r) => (r.status === "fulfilled" && r.value?.status === "succeeded" ? [r.value] : []));
+}
+
+/**
+ * A file asked for from an answer's Download menu, posted in its thread: the answer as a PDF (as the web app draws it,
+ * each number listed at the end with its query cell), or the rows of a query it cites as CSV (as its card shows them).
+ * Read as the asker; only a query the answer cites. "skipped": nothing to send (the asker left, Slack took the app
+ * back, or there's no such file).
+ */
+export async function deliverSlackFile(
   deps: DeliverDeps,
   bot: Chat,
   slack: SlackAdapter,
-  job: SlackReplyJob,
+  job: SlackFilesJob,
+): Promise<"done" | "skipped"> {
+  const target = await deps.withTenant(job.orgId, (tx) => slackReplyOf(tx, job.orgId, job.runId));
+  if (!target?.userId || !target.linked) return "skipped";
+  const workspace = await slackBotToken(deps, target.teamId);
+  if (!workspace?.token) return "skipped";
+  const viewer = { orgId: job.orgId, userId: target.userId };
+  const run = await getRun({ withTenant: deps.withTenant }, viewer, job.runId);
+  const outcome = run?.outcome;
+  if (outcome?.kind !== "answer") return "skipped";
+  const cited = await citedCards(deps, viewer, fileSources(outcome));
+  let file: { filename: string; data: Buffer; mimeType: string } | null = null;
+  let said = "";
+  if (job.file === "pdf") {
+    const answer = pdfAnswer(outcome);
+    const about = answer ? await deps.withTenant(job.orgId, (tx) => answerAbout(tx, job.orgId, job.runId)) : null;
+    if (!answer || !about) return "skipped";
+    const blocks = answerBlocks(answer, {
+      ...about,
+      note: `Asked in Slack, answered from ${about.sourceName}. Each number is listed at the end with the query cell it was read from.`,
+      names: new Map(cited.map((c) => [c.id, { alias: c.alias, title: c.title }])),
+    });
+    const pdf = await renderPdf(blocks, about.question, undefined, {
+      onChartError: (error) =>
+        deps.log?.("slack file: a chart drawn as a table", { runId: job.runId, why: String(error) }),
+    });
+    file = { filename: pdfFileName(about.question), data: Buffer.from(pdf), mimeType: "application/pdf" };
+    said = "The answer as a PDF.";
+  } else {
+    const card = cited.find((c) => `csv:${c.id}` === job.file && c.preview.length > 0);
+    if (!card) return "skipped";
+    const csv = cardCsv(card);
+    file = { filename: csv.filename, data: csv.data, mimeType: "text/csv" };
+    const kept = card.preview.length;
+    said = card.truncated
+      ? `The rows of “${card.title}” as CSV: the first ${kept}, of a result that was cut short.`
+      : card.rows !== null && card.rows > kept
+        ? `The rows of “${card.title}” as CSV: the first ${kept} of ${card.rows}.`
+        : `The rows of “${card.title}” as CSV.`;
+  }
+  // Checked again now it's made: one who left meanwhile gets nothing.
+  const still = await deps.withTenant(job.orgId, (tx) => slackReplyOf(tx, job.orgId, job.runId));
+  if (!still?.linked || still.userId !== target.userId) return "skipped";
+  const sent = file;
+  // A query's title is the model's words: said with every link's address in sight, notifying nobody.
+  await slack.withBotToken(
+    workspace.token,
+    async () => {
+      await bot.thread(target.slackThreadId).post({ markdown: quiet(visibleLinks(said)), files: [sent] });
+    },
+    { installationId: target.teamId },
+  );
+  return "done";
+}
+
+/**
+ * A file the queue gave up on (its dead letter): its asker told privately, in the answer's thread, that it wasn't made,
+ * so a pick never comes to nothing. False: nobody to tell (they left, or Slack took the app back).
+ */
+export async function abandonSlackFile(
+  deps: DeliverDeps,
+  bot: Chat,
+  slack: SlackAdapter,
+  job: SlackFilesJob,
 ): Promise<boolean> {
+  const target = await deps.withTenant(job.orgId, (tx) => slackReplyOf(tx, job.orgId, job.runId));
+  if (!target?.userId || !target.linked) return false;
+  const workspace = await slackBotToken(deps, target.teamId);
+  if (!workspace?.token) return false;
+  const which = job.file === "pdf" ? "the PDF" : "that CSV";
+  await slack.withBotToken(
+    workspace.token,
+    // The answer is in the thread, so the thread is shown: said there, to the asker only.
+    () =>
+      tellPrivately(
+        bot.thread(target.slackThreadId),
+        target.slackUserId,
+        `I couldn't make ${which}. Pick it again from Download, or get it from the answer in OpenDash.`,
+        true,
+      ),
+    { installationId: target.teamId },
+  );
+  return true;
+}
+
+/**
+ * The last word on a reply the queue gave up on (its dead letter): the person told where the answer is, if the reply
+ * is still unfinished.
+ */
+export async function abandonSlackReply(deps: DeliverDeps, slack: SlackAdapter, job: SlackReplyJob): Promise<boolean> {
   const target = await deps.withTenant(job.orgId, (tx) => slackReplyOf(tx, job.orgId, job.runId));
   if (target?.status !== "streaming" || !target.userId) return false;
   const attempt = await deps.withTenant(job.orgId, (tx) => beginSlackReplyAttempt(tx, job.orgId, job.runId));
@@ -317,15 +449,7 @@ export async function abandonSlackReply(
   }
   const workspace = await slackBotToken(deps, target.teamId);
   const token = workspace?.token;
-  const reply = new Reply(
-    deps,
-    bot,
-    slack,
-    job,
-    { ...target, userId: target.userId },
-    attempt,
-    workspace?.botUserId ?? "",
-  );
+  const reply = new Reply(deps, slack, job, { ...target, userId: target.userId }, attempt, workspace?.botUserId ?? "");
   if (!token) {
     await deps.withTenant(job.orgId, (tx) => finishSlackReplyAttempt(tx, job.orgId, job.runId, attempt, "failed"));
     return true;
@@ -342,10 +466,11 @@ class Reply {
   private readonly who: { initiatorUserId: string };
   /** What the answer remembered for its asker, shown under it with Undo. */
   private remembered: { id: string; fact: string; why: string }[] = [];
+  /** Slack refused the answer's card in this attempt: it goes on without one. */
+  private cardRefused = false;
 
   constructor(
     private readonly deps: DeliverDeps,
-    private readonly bot: Chat,
     private readonly slack: SlackAdapter,
     private readonly job: SlackReplyJob,
     private readonly target: {
@@ -436,32 +561,91 @@ class Reply {
   }
 
   /**
-   * Sends a message with what goes under the answer when it's the last (`replyBlocks`): Slack's own 👍/👎 first, and
-   * plain buttons for them where Slack refuses those, so the answer never waits on a button.
+   * Sends a message with what goes under the answer when it's the last (`replyBlocks`). With a card (`answerCard`),
+   * the card first. Slack refusing the blocks: Slack's own 👍/👎 give way to plain buttons (Slack refuses its own in
+   * some places), and then the card to today's message, again with Slack's buttons and then plain ones. So the answer
+   * never waits on a button or a card, and a refused card isn't blamed on the buttons.
    */
   private async underneath<T>(
     said: ReturnType<typeof replyText>,
     last: boolean,
-    send: (blocks: Record<string, unknown>[] | undefined) => Promise<T>,
+    send: (blocks: Record<string, unknown>[] | undefined, card: AnswerCard | null) => Promise<T>,
+    card: AnswerCard | null = null,
   ): Promise<T> {
-    if (!last) return send(undefined);
-    try {
-      return await send(replyBlocks(said, this.job.runId, "native", this.remembered, this.channel.startsWith("D")));
-    } catch (error) {
-      if (!REFUSED_BLOCKS.has(failureCode(error))) throw error;
-      this.deps.log?.("slack reply: plain feedback buttons", { runId: this.job.runId, why: failureCode(error) });
-      return send(replyBlocks(said, this.job.runId, "plain", this.remembered, this.channel.startsWith("D")));
+    if (!last) return send(undefined, null);
+    const dm = this.channel.startsWith("D");
+    const tries: { card: AnswerCard | null; feedback: "native" | "plain" }[] = [
+      ...(card && !this.cardRefused
+        ? [
+            { card, feedback: "native" as const },
+            { card, feedback: "plain" as const },
+          ]
+        : []),
+      { card: null, feedback: "native" },
+      { card: null, feedback: "plain" },
+    ];
+    const { orgId, runId } = this.job;
+    for (let i = 0; ; i++) {
+      const t = tries[i] as (typeof tries)[number];
+      // Marked before it's sent as a card; and before every send, this attempt still the latest (a newer one may have
+      // posted the answer meanwhile, while this one looked for it in the thread, say).
+      if (t.card) await this.ledger(() => this.once(CARD_SENT, async () => null, false));
+      await this.deps.checkpoint?.("sending answer");
+      await this.ledger(() =>
+        this.deps.withTenant(orgId, (tx) => checkSlackReplyAttempt(tx, orgId, runId, this.attempt)),
+      );
+      try {
+        return await send(replyBlocks(said, runId, t.feedback, this.remembered, dm), t.card);
+      } catch (error) {
+        const why = failureCode(error);
+        const next = tries[i + 1];
+        // A card Slack says no to, for any reason but one that ends the reply or a rate limit: the answer goes without
+        // it, whatever Slack's words for the refusal (only these three say it's the blocks, maybe only the buttons).
+        const refusal = slackRefusal(error);
+        const cardNo = t.card !== null && refusal !== null && !FOR_GOOD.has(refusal) && !UNSURE.has(refusal);
+        if (!next || !(REFUSED_BLOCKS.has(why) || cardNo)) throw error;
+        const plain = tries.findIndex((x) => x.card === null);
+        if (t.card && (!next.card || !REFUSED_BLOCKS.has(why))) {
+          // Marked before the answer goes without it: no attempt sends it as a card again, and every chart is an image.
+          await this.ledger(() => this.once(CARD_REFUSED, async () => null, false));
+          this.cardRefused = true;
+          this.deps.log?.("slack reply: without its card", { runId, why });
+          i = plain - 1;
+        } else {
+          this.deps.log?.("slack reply: plain feedback buttons", { runId, why });
+        }
+      }
     }
   }
 
-  /** One of the answer's messages, posted the plain way: its words as a markdown block, the last with its buttons. */
-  private posted(part: string, markdown: string, said: ReturnType<typeof replyText>, last: boolean) {
-    return this.underneath(said, last, (blocks) =>
-      this.post(part, {
-        // What a notification shows, where blocks can't be.
-        text: markdown.slice(0, 300),
-        blocks: [{ type: "markdown", text: markdown }, ...(blocks ?? [])],
-      }),
+  /** A write to the reply's own records while the answer is sent: its failure is the job's to retry, never a refusal. */
+  private async ledger<T>(fn: () => Promise<T>): Promise<T> {
+    try {
+      return await fn();
+    } catch (error) {
+      if (error instanceof SlackReplyFenced) throw error;
+      throw new ReplyLedgerError(error instanceof Error ? error.message : String(error), { cause: error });
+    }
+  }
+
+  /** One of the answer's messages, posted the plain way: its words as a markdown block (or its card), the last with its buttons. */
+  private posted(
+    part: string,
+    markdown: string,
+    said: ReturnType<typeof replyText>,
+    last: boolean,
+    card: AnswerCard | null = null,
+  ) {
+    return this.underneath(
+      said,
+      last,
+      (blocks, withCard) =>
+        this.post(part, {
+          // What a notification shows, where blocks can't be.
+          text: markdown.slice(0, 300),
+          blocks: [...(withCard ? withCard.blocks : [{ type: "markdown", text: markdown }]), ...(blocks ?? [])],
+        }),
+      card,
     );
   }
 
@@ -556,8 +740,12 @@ class Reply {
       throw error;
     }
     const ask = run?.thread_id ? `${this.url}/ask/${encodeURIComponent(run.thread_id)}` : this.url;
-    const said = replyText(run?.outcome ?? null, run?.status ?? "failed", ask);
     const asker = this.target.userId;
+    // What its Download menu offers, read as the asker sees them: the answer as a PDF, each cited query's rows.
+    const base = replyText(run?.outcome ?? null, run?.status ?? "failed", ask);
+    const sources = fileSources(run?.outcome);
+    const cards = sources.length ? await citedCards(deps, { orgId: job.orgId, userId: asker }, sources) : [];
+    const said = { ...base, downloads: downloadsOf(job.runId, run?.outcome, cards, deps.maxFiles) };
     this.remembered = deps.withUser
       ? await deps
           .withUser(job.orgId, asker, (tx) => memoriesOfRun(tx, { orgId: job.orgId, userId: asker }, job.runId))
@@ -567,19 +755,48 @@ class Reply {
     const [lead, ...rest] = said.messages;
     const first = lead === undefined || !this.target.shared ? lead : addressed(this.target.slackUserId, lead);
     const lastPart = rest.length ? `answer:${rest.length + 1}` : "answer";
+    // An answer that's one message, as a card: its table and charts Slack's own (null: today's message). Not once
+    // Slack refused it, in an earlier attempt too.
+    const begun = (part: string) =>
+      deps.withTenant(job.orgId, (tx) => slackReplyPartBegun(tx, job.orgId, job.runId, part));
+    let made: AnswerCard | null = null;
+    if (!rest.length) {
+      try {
+        made = answerCard(
+          run?.outcome,
+          this.target.shared ? (md) => addressed(this.target.slackUserId, md) : undefined,
+        );
+      } catch (error) {
+        // A card is never worth the answer: one that can't be made is today's message.
+        deps.log?.("slack reply: no card", { runId: job.runId, why: failureCode(error) });
+      }
+    }
+    const card = made && !(await begun(CARD_REFUSED)) ? made : null;
     // The answer, all at once: in the message that showed its steps, or the plain way when that didn't take it. The
     // last of its messages carries what was checked and its buttons.
     await this.once("answer", async () => {
       if (streaming && steps && first !== undefined) {
-        const at = await this.underneath(said, lastPart === "answer", (blocks) =>
-          steps.finish(first, { metadata: this.marked("answer"), ...(blocks ? { blocks } : {}) }),
-        ).catch(() => null);
+        const at = await this.underneath(
+          said,
+          lastPart === "answer",
+          (blocks, withCard) =>
+            steps.finish(withCard ? null : first, {
+              metadata: this.marked("answer"),
+              ...(withCard || blocks ? { blocks: [...(withCard?.blocks ?? []), ...(blocks ?? [])] } : {}),
+            }),
+          card,
+        ).catch((error: unknown) => {
+          // Slack not taking it is looked into below; the reply's own records failing is the job's to retry.
+          if (error instanceof SlackReplyFenced) throw error;
+          if (error instanceof ReplyLedgerError) throw error.cause;
+          return null;
+        });
         if (at) return at;
         // Slack may have taken it before the answer came back: looked for before it's posted again.
         const found = await this.find("answer");
         if (found) return found;
       }
-      return this.posted("answer", first ?? "", said, lastPart === "answer");
+      return this.posted("answer", first ?? "", said, lastPart === "answer", card);
     });
     // An earlier attempt posted it: the cards are stopped as they are (after `finish`, nothing is left open; one Slack
     // stopped already says so, harmlessly).
@@ -588,13 +805,52 @@ class Reply {
       const part = `answer:${i + 2}`;
       await this.once(part, () => this.posted(part, markdown, said, part === lastPart));
     }
-    // Its charts, as images in the thread, each the page's own drawing with its values as alt text.
+    // Its other charts: Slack's own, two a message, where Slack can draw them; the rest as images, each the page's
+    // own drawing with its values as alt text. Those its card drew aren't sent again, when the answer went as a card
+    // (marked so); once Slack refused the card's blocks, every chart is an image. An answer with no mark (an attempt
+    // from before cards, say) has every chart as an image.
     const outcome = run?.outcome;
     if (outcome?.kind === "answer" && outcome.status === "answered" && outcome.charts?.length) {
-      await this.charts(outcome.charts).catch((error: unknown) => {
-        if (error instanceof SlackReplyFenced) throw error;
-        deps.log?.("slack reply: its charts weren't posted", { runId: job.runId, why: failureCode(error) });
-      });
+      const charts = outcome.charts;
+      const refused = this.cardRefused || (await begun(CARD_REFUSED));
+      const drawn = card !== null && !refused && (await begun(CARD_SENT)) ? card.charts : [];
+      let plan: { messages: { blocks: Record<string, unknown>[]; charts: number[] }[]; images: number[] } = {
+        messages: [],
+        images: charts.map((_, i) => i).filter((i) => !drawn.includes(i)),
+      };
+      if (!refused) {
+        try {
+          plan = chartMessages(outcome, drawn);
+        } catch (error) {
+          deps.log?.("slack reply: charts as images", { runId: job.runId, why: failureCode(error) });
+        }
+      }
+      const images = [...plan.images];
+      for (const [k, m] of plan.messages.entries()) {
+        const part = `charts:${k + 1}`;
+        // What a notification and a screen reader say: each chart's title and values, as its image's alt text.
+        const text = m.charts.flatMap((i) => (charts[i] ? [chartAltText(charts[i])] : [])).join("\n");
+        const refusedHere = await this.once(part, () => this.post(part, { text, blocks: m.blocks }), false)
+          .then(() => false)
+          .catch((error: unknown) => {
+            if (error instanceof SlackReplyFenced) throw error;
+            // Only Slack saying no to these blocks makes them images; anything else may have posted them.
+            const refusal = slackRefusal(error);
+            const no = refusal !== null && !UNSURE.has(refusal);
+            deps.log?.(no ? "slack reply: charts as images" : "slack reply: charts may not have posted", {
+              runId: job.runId,
+              why: failureCode(error),
+            });
+            return no;
+          });
+        if (refusedHere) images.push(...m.charts);
+      }
+      const pictures = images.sort((a, b) => a - b).flatMap((i) => (charts[i] ? [charts[i]] : []));
+      if (pictures.length)
+        await this.charts(pictures).catch((error: unknown) => {
+          if (error instanceof SlackReplyFenced) throw error;
+          deps.log?.("slack reply: its charts weren't posted", { runId: job.runId, why: failureCode(error) });
+        });
     }
     if (said.questions?.length) {
       const questions = said.questions;
@@ -639,9 +895,7 @@ class Reply {
       await slack.removeReaction(this.threadId, ts, "eyes").catch(() => {});
       if (said.answered) await slack.addReaction(this.threadId, ts, "check").catch(() => {});
     }
-    await this.files(said.cited, run?.outcome).catch((error: unknown) => {
-      if (error instanceof SlackReplyFenced) throw error;
-    });
+    // Its files (the PDF, the rows as CSV) only when asked for, from its Download menu (`deliverSlackFile`).
     await this.deps.withTenant(job.orgId, (tx) =>
       finishSlackReplyAttempt(tx, job.orgId, job.runId, this.attempt, "done"),
     );
@@ -676,67 +930,6 @@ class Reply {
           })),
         });
         return null;
-      },
-      false,
-    );
-  }
-
-  /**
-   * The queries behind the answer, as the asker sees them in OpenDash (query cards): their rows as CSV, their names in
-   * the PDF's appendix; and the answer as a PDF, when it has numbers. One message, at most once.
-   */
-  private async files(citedIds: string[], outcome: Parameters<typeof pdfAnswer>[0]): Promise<void> {
-    const { deps, job } = this;
-    const viewer = { orgId: job.orgId, userId: this.target.userId };
-    const cited = (
-      await Promise.all(citedIds.slice(0, 20).map((id) => getQueryCard({ withTenant: deps.withTenant }, viewer, id)))
-    ).filter((c): c is QueryCard => c !== null && c.status === "succeeded");
-    const cards = cited.filter((c) => c.preview.length > 0).slice(0, deps.maxFiles ?? 3);
-    const answer = pdfAnswer(outcome);
-    if (!answer && !cards.length) return;
-    await this.once(
-      "files",
-      async () => {
-        const pdf = answer
-          ? await (async () => {
-              const about = await deps.withTenant(job.orgId, (tx) => answerAbout(tx, job.orgId, job.runId));
-              if (!about) return null;
-              const blocks = answerBlocks(answer, {
-                ...about,
-                note: `Asked in Slack, answered from ${about.sourceName}. Each number is listed at the end with the query cell it was read from.`,
-                names: new Map(cited.map((c) => [c.id, { alias: c.alias, title: c.title }])),
-              });
-              return {
-                filename: pdfFileName(about.question),
-                data: Buffer.from(
-                  await renderPdf(blocks, about.question, undefined, {
-                    onChartError: (error) =>
-                      deps.log?.("slack reply: a chart drawn as a table", { runId: job.runId, why: String(error) }),
-                  }),
-                ),
-              };
-            })().catch(() => null)
-          : null;
-        if (!pdf && !cards.length) return null;
-        // Left the workspace while the files were made: they aren't sent (the answer went while they were a member).
-        const still = await deps.withTenant(job.orgId, (tx) => slackReplyOf(tx, job.orgId, job.runId));
-        if (!still?.linked) return null;
-        const rows = cards.length === 1 ? "the rows behind it as CSV" : "the rows behind it as CSV, a file a query";
-        const sent = await this.bot.thread(this.threadId).post({
-          markdown: pdf
-            ? cards.length
-              ? `The answer as a PDF, and ${rows}.`
-              : "The answer as a PDF."
-            : `${rows[0]?.toUpperCase()}${rows.slice(1)}.`,
-          files: [
-            ...(pdf ? [{ filename: pdf.filename, data: pdf.data, mimeType: "application/pdf" }] : []),
-            ...cards.map((c) => {
-              const csv = cardCsv(c);
-              return { filename: csv.filename, data: csv.data, mimeType: "text/csv" };
-            }),
-          ],
-        });
-        return (sent as { id?: string } | undefined)?.id ?? null;
       },
       false,
     );

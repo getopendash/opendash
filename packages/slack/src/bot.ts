@@ -14,6 +14,7 @@ import {
   connectedSlackTeam,
   type DeploymentKeys,
   dismissInsight,
+  enqueueOnce,
   type FeedbackDeps,
   giveFeedback,
   type LedgerDeps,
@@ -24,6 +25,7 @@ import {
   slackAsker,
   slackAskOf,
   slackBotToken,
+  slackFilesQueue,
   slackInboundHandled,
   slackSuggestions,
   startInvestigation,
@@ -42,7 +44,7 @@ import { HOME_LINK, HOME_UNLINK, publishSlackHome } from "./home";
 import { DEDUPE_TTL_MS, inboundKeyOf, teamOf } from "./inbound";
 import { LEARNING_APPROVE, LEARNING_REJECT, LEARNING_REVERT, LEARNING_SUGGEST, REVERTED } from "./learning";
 import { tellPrivately, threadShownFor } from "./privately";
-import { FEEDBACK_ACTION, MEMORY_UNDO, NEXT_ACTIONS, quiet, RATE_ACTIONS } from "./reply";
+import { DOWNLOAD_ACTION, FEEDBACK_ACTION, MEMORY_UNDO, NEXT_ACTIONS, quiet, RATE_ACTIONS } from "./reply";
 import { findingChoice, ROUTINE_FINDING } from "./routine";
 
 export interface SlackBotDeps {
@@ -102,10 +104,12 @@ interface Asked {
 }
 
 /** A button's value as JSON ({r: run, i: place}), or null (a button from before values carried them). */
-const buttonValue = (value: string | undefined): { r?: unknown; i?: unknown; m?: unknown; p?: unknown } | null => {
+/** What a press carries: a run (`r`), a place (`i`), a memory (`m`), a proposal (`p`), a file (`f`, or a query `q`). */
+type PressValue = { r?: unknown; i?: unknown; m?: unknown; p?: unknown; f?: unknown; q?: unknown };
+const buttonValue = (value: string | undefined): PressValue | null => {
   try {
     const v = JSON.parse(value ?? "") as unknown;
-    return v && typeof v === "object" ? (v as { r?: unknown; i?: unknown; m?: unknown; p?: unknown }) : null;
+    return v && typeof v === "object" ? (v as PressValue) : null;
   } catch {
     return null;
   }
@@ -428,6 +432,43 @@ export function createSlackBot(deps: SlackBotDeps, config: SlackBotConfig): { bo
         return;
       }
       await ask(thread, { ...pressed, text: followUp });
+    }),
+  );
+
+  // A file from an answer's Download menu (its PDF, a cited query's rows as CSV): by the person who asked, as
+  // they see it; the worker makes it and posts it in the thread.
+  bot.onAction(DOWNLOAD_ACTION, async (event) =>
+    handling(event.raw, async () => {
+      const thread = event.thread;
+      const teamId = teamOf(event.raw);
+      const value = buttonValue(event.value);
+      if (!thread || !teamId || typeof value?.r !== "string") return;
+      const runId = value.r;
+      const file = value.f === "pdf" ? "pdf" : typeof value.q === "string" ? (`csv:${value.q}` as const) : null;
+      if (!file) return;
+      const pressed: Asked = { raw: event.raw, author: event.user, id: `download:${runId}`, text: "" };
+      const asker = await slackAsker(deps, teamId, event.user.userId);
+      if (asker.kind === "unconnected") return;
+      const answer = await deps.withTenant(asker.orgId, (tx) => slackAnswerOf(tx, asker.orgId, runId));
+      if (!answer) return;
+      if (answer.slackUserId !== event.user.userId || asker.kind !== "member") {
+        await tell(thread, pressed, "Only the person who asked can download its files here. Open it in OpenDash.");
+        return;
+      }
+      const boss = await deps.boss();
+      await deps.withTenant(asker.orgId, (tx) =>
+        // A second pick of the same file in a few seconds (a double press, Slack sending it again) is the same ask.
+        enqueueOnce(
+          boss,
+          tx,
+          slackFilesQueue,
+          { orgId: asker.orgId, runId, file },
+          {
+            singletonKey: `${runId}:${file}`,
+            singletonSeconds: 15,
+          },
+        ),
+      );
     }),
   );
 

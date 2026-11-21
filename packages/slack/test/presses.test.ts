@@ -206,6 +206,33 @@ describe("a press under an answer in Slack", () => {
     expect(count?.n).toBe(2);
   });
 
+  it("is a file from its Download menu, the asker's alone, made by the worker", async () => {
+    const a = await answered(answer);
+    const since = fake.calls.length;
+    const pick = {
+      action_id: "opendash:download",
+      type: "static_select",
+      selected_option: { value: JSON.stringify({ r: a.runId, f: "pdf" }) },
+    };
+    await deliver(press(a.ts, MALLORY, pick));
+    expect(told(MALLORY, since)).toEqual([
+      "Only the person who asked can download its files here. Open it in OpenDash.",
+    ]);
+    const queued = () => s.t.owner<{ data: unknown }[]>`
+      select data from pgboss.job where name = 'slack.files' and data->>'runId' = ${a.runId}`;
+    expect(await queued()).toEqual([]);
+    await deliver(press(a.ts, PRIYA, pick));
+    expect(await queued()).toEqual([{ data: { orgId: s.orgId, runId: a.runId, file: "pdf" } }]);
+    // Picked again a moment later (a double press, Slack sending it twice): the same ask, one file.
+    await deliver(press(a.ts, PRIYA, pick));
+    expect(await queued()).toHaveLength(1);
+    // A query's rows: the query run it names.
+    const q = "0195f3c0-0000-7000-8000-000000000001";
+    await deliver(press(a.ts, PRIYA, { ...pick, selected_option: { value: JSON.stringify({ r: a.runId, q }) } }));
+    expect((await queued()).map((j) => (j.data as { file: string }).file)).toEqual(["pdf", `csv:${q}`]);
+    await s.t.owner`delete from pgboss.job where name = 'slack.files' and data->>'runId' = ${a.runId}`;
+  });
+
   it("is an option under a question back, the asker's alone", async () => {
     const a = await answered({ kind: "clarify", question: "Which revenue?", options: ["MRR", "Bookings"] });
     const since = fake.calls.length;

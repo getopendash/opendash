@@ -122,6 +122,128 @@ export function parseMarkdown(source: string): Block[] {
   return blocks(tree.children);
 }
 
+/** An answer's first table, taken out of its markdown (`takeTable`). */
+export interface TakenTable {
+  /** The markdown before it and after it, exactly as written. */
+  before: string;
+  after: string;
+  align: Align[];
+  /** Its cells as plain text, every row as wide as its header. */
+  head: string[];
+  rows: string[][];
+  /**
+   * Whether every cell says the same as plain text: false when one holds struck text (`~~12~~ 14` would read as a
+   * current 12), a link whose words aren't its address (it would lose where it goes), or two marked pieces that would
+   * run together into one number (`**12**_14_` as 1214).
+   */
+  flat: boolean;
+}
+
+/**
+ * The first table at the top of an answer's markdown (not one inside a list or a quote), cut out where the parser found
+ * it, so a channel can draw it its own way: the text around it is never rewritten. Null when there's none.
+ */
+export function takeTable(source: string): TakenTable | null {
+  const tree = fromMarkdown(source, { extensions: [gfm()], mdastExtensions: [gfmFromMarkdown()] });
+  const node = tree.children.find((n) => n.type === "table");
+  const start = node?.position?.start.offset;
+  const end = node?.position?.end.offset;
+  if (node?.type !== "table" || start === undefined || end === undefined) return null;
+  let flat = true;
+  // A link says where it goes only when its text is its address (a bare one, as GFM finds them).
+  const bare = (t: string) => t.replace(/^(https?:\/\/|mailto:)/i, "").replace(/\/$/, "");
+  // A link whose target isn't followed (a relative one: its address could hold a value) says even less.
+  const unsaid = (parts: Inline[]): boolean =>
+    parts.some(
+      (p) =>
+        p.kind === "struck" ||
+        (p.kind === "link" && (p.href === null || bare(plainText(p.children).trim()) !== bare(p.href))) ||
+        ("children" in p && unsaid(p.children)),
+    );
+  // What the parse turns into its text alone, losing where it points: an image, a reference to a link or a note.
+  const lost = (n: Nodes): boolean =>
+    ["image", "imageReference", "linkReference", "footnoteReference"].includes(n.type) ||
+    ("children" in n && (n.children as Nodes[]).some(lost));
+  const cell = (c: (typeof node.children)[number]["children"][number]) => {
+    const parts = inlines(c.children);
+    if (unsaid(parts) || joins(parts) || c.children.some((n) => lost(n as Nodes))) flat = false;
+    return plainText(parts).trim();
+  };
+  const [headRow, ...bodyRows] = node.children;
+  const head = (headRow?.children ?? []).map(cell);
+  const width = head.length;
+  const row = (r: (typeof node.children)[number]) => {
+    // A row wider than its header was cut by a `|` the parse took for a column (a Slack link's, say): its last cells
+    // would be lost, so the table isn't flat.
+    if (r.children.length > width) flat = false;
+    const cells = r.children.slice(0, width).map(cell);
+    return [...cells, ...Array<string>(width - cells.length).fill("")];
+  };
+  return {
+    before: source.slice(0, start).trimEnd(),
+    // Only the blank lines after it: an indented line keeps its indent (an indented code block stays code).
+    after: source.slice(end).replace(/^(?:[ \t]*\r?\n)+/, ""),
+    align: (node.align ?? []).map((a) => a ?? null),
+    head,
+    rows: bodyRows.map(row),
+    flat,
+  };
+}
+
+/** Inline parts' pieces of text, a new one at every change of mark: where plain text would join two numbers. */
+function pieces(parts: Inline[], out: string[] = []): string[] {
+  for (const p of parts) {
+    if (p.kind === "text" || p.kind === "code") out.push(p.text);
+    else if (p.kind === "break") out.push("\n");
+    else pieces(p.children, out);
+  }
+  return out;
+}
+
+/**
+ * Whether plain text would run two numbers together: two marked pieces side by side (`**12**_14_` as 1214), or, within
+ * a piece, a reference right beside another or beside digits.
+ */
+function joins(parts: Inline[]): boolean {
+  const ends = new RegExp(`[\\p{N}${REF_CLOSE}]$`, "u");
+  const starts = new RegExp(`^[\\p{N}${REF_OPEN}]`, "u");
+  const beside = new RegExp(`${REF_CLOSE}[\\p{N}${REF_OPEN}]|\\p{N}${REF_OPEN}`, "u");
+  const ps = pieces(parts).filter((t) => t !== "");
+  return ps.some((t, i) => beside.test(t) || (i > 0 && ends.test(ps[i - 1] ?? "") && starts.test(t)));
+}
+
+const struck = (parts: Inline[]): boolean =>
+  parts.some((p) => p.kind === "struck" || ("children" in p && struck(p.children)));
+
+/**
+ * Markdown as one line of plain text (marks dropped; a list's, a quote's and a table's text kept), or null when plain
+ * text would say something else: struck text (`~~12~~ 14` would read as a current 12), or two numbers run together.
+ */
+export function flatLine(source: string): string | null {
+  const lines: Inline[][] = [];
+  const code: string[] = [];
+  const walk = (blocks: Block[]) => {
+    for (const b of blocks) {
+      if (b.kind === "paragraph" || b.kind === "heading") lines.push(b.content);
+      else if (b.kind === "list") for (const item of b.items) walk(item);
+      else if (b.kind === "quote") walk(b.children);
+      else if (b.kind === "table") for (const row of [b.head, ...b.rows]) lines.push(...row);
+      else if (b.kind === "code") code.push(b.text);
+    }
+  };
+  walk(parseMarkdown(source));
+  if (lines.some((l) => struck(l) || joins(l))) return null;
+  return [...lines.map(plainText), ...code].join(" ").replace(/\s+/g, " ").trim();
+}
+
+/** Whether markdown defines a link reference (`[g]: https://…`), which a link elsewhere in the text may use. */
+export function hasDefinitions(source: string): boolean {
+  const tree = fromMarkdown(source, { extensions: [gfm()], mdastExtensions: [gfmFromMarkdown()] });
+  const found = (n: Nodes): boolean =>
+    n.type === "definition" || ("children" in n && (n.children as Nodes[]).some(found));
+  return found(tree);
+}
+
 /** Inline parts as plain text: marks dropped, a break a newline (for a cell's alignment, a caveat's chip). */
 export function plainText(parts: Inline[]): string {
   return parts
