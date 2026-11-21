@@ -146,10 +146,17 @@ export async function analystOutcome(deps: AgentDeps, run: ClaimedRun): Promise<
     rowsShown: BUDGETS.agent.rowsToModel,
   });
   // The answer's path (the label it shows): metric only when every query its numbers cite came from definitions.
+  const figureSegments = gate.figures.flatMap((f) => [...f.value, ...(f.change?.segments ?? []), ...(f.detail ?? [])]);
   const cited = new Set(
-    [...gate.segments.markdown, ...gate.segments.caveats.flat(), ...gate.segments.interpretation.flat()].flatMap(
-      (seg) => ("ref" in seg && seg.kind === "number" ? seg.citations.map((c) => c.alias) : []),
-    ),
+    [
+      ...gate.segments.markdown,
+      ...gate.segments.caveats.flat(),
+      ...gate.segments.interpretation.flat(),
+      ...figureSegments,
+    ]
+      .flatMap((seg) => ("ref" in seg && seg.kind === "number" ? seg.citations.map((c) => c.alias) : []))
+      // A figure's trend shows its cells too: a trend from own SQL makes the answer's path its own.
+      .concat(gate.figures.flatMap((f) => f.trend?.points.map((p) => p.cell.alias) ?? [])),
   );
   const path =
     cited.size > 0 && [...cited].every((a) => results.find((r) => r.alias === a)?.path === "metric")
@@ -174,6 +181,8 @@ export async function analystOutcome(deps: AgentDeps, run: ClaimedRun): Promise<
     ...(gate.crossChecks.length ? { crossChecks: gate.crossChecks } : {}),
     path,
     ...(gate.charts.length ? { charts: gate.charts } : {}),
+    ...(gate.title ? { title: gate.title } : {}),
+    ...(gate.figures.length ? { figures: gate.figures } : {}),
     // What it can do instead (with cannot_answer) or next: plain questions, never numbers to check.
     ...(args.next?.length
       ? {

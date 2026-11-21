@@ -36,6 +36,91 @@ describe("an answer's PDF", () => {
     expect(unverified[2]).toEqual({ kind: "note", text: "Asked in Slack. Some of it couldn't be verified." });
   });
 
+  it("draws its title and headline figures above its text, a table a group, and traces their numbers", () => {
+    const at = {
+      organization: "Acme",
+      answeredAt: "2026-10-11T09:00:00Z",
+      question: "Why?",
+      names,
+      note: "From OpenDash.",
+    };
+    const ref = (display: string, row: number) => ({
+      ref: `q1:${row}:churned_mrr`,
+      display,
+      kind: "number",
+      citations: [cell(row)],
+    });
+    const blocks = answerBlocks(
+      {
+        ...answer([{ text: "It fell." }]),
+        title: "Churn at a glance",
+        figures: [
+          {
+            label: "Churned MRR",
+            value: [ref("$9.8k", 1)],
+            change: { segments: [ref("-12%", 0)], direction: "down" },
+            vs: "vs August",
+            trend: {
+              label: "By month",
+              points: [0, 1].map((row) => ({ value: row, display: `$${row}k`, cell: cell(row) })),
+            },
+          },
+          { label: "Starter", value: [ref("$4.1k", 2)], group: "By plan" },
+        ],
+      } as unknown as Answer,
+      at,
+    );
+    expect(blocks.map((b) => b.kind)).toEqual([
+      "head",
+      "title",
+      "note",
+      "chips",
+      "heading",
+      "table",
+      "paragraph",
+      "table",
+      "paragraph",
+      "trace",
+    ]);
+    const table = blocks[5] as { rows: { text: string }[][][] };
+    expect(table.rows[0]?.map((c) => c.map((r) => r.text).join(""))).toEqual([
+      "Churned MRR",
+      "$9.8k",
+      "▼ -12% vs August",
+      "By month: $0k · $1k",
+    ]);
+    const trace = blocks.at(-1) as { rows: { figure: string; cell: string }[] };
+    expect(trace.rows.map((r) => r.figure)).toEqual(["$9.8k", "-12%", "$4.1k", "$0k · $1k"]);
+    expect(trace.rows.at(-1)?.cell).toBe("rows 1, 2 · churned_mrr");
+  });
+
+  it("names each cell of a number computed from several queries with its own query", () => {
+    const at = { organization: "Acme", answeredAt: "2026-10-11T09:00:00Z", question: "Why?", note: "n" };
+    const names2 = new Map([
+      ["qr1", { alias: "q1", title: "Orders" }],
+      ["qr3", { alias: "q3", title: "Orders before" }],
+    ]);
+    const blocks = answerBlocks(
+      answer([
+        {
+          ref: "pct(q1:0:orders,q3:0:before)",
+          display: "-20%",
+          kind: "number",
+          citations: [
+            { alias: "q1", queryRunId: "qr1", row: 0, column: "orders" },
+            { alias: "q3", queryRunId: "qr3", row: 0, column: "before" },
+          ],
+        },
+      ]),
+      { ...at, names: names2 },
+    );
+    const trace = blocks.at(-1) as { rows: { query: string; cell: string }[] };
+    expect(trace.rows[0]).toMatchObject({
+      query: "q1 · Orders; q3 · Orders before",
+      cell: "q1 row 1 · orders; q3 row 1 · before",
+    });
+  });
+
   it("draws a markdown table and list as a table and a list, not a line of pipes", () => {
     const r = (text: string, style = "regular") => ({ text, style });
     expect(

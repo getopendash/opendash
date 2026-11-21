@@ -99,6 +99,8 @@ describe("the answer as Slack text", () => {
       answered: true,
       context: { reading: "Paid accounts · Sep 2026 vs Aug 2026", caveats: ["September closed on Oct 1."] },
       downloads: [],
+      figures: [],
+      title: null,
     });
     const unverified = replyText(
       { ...answer, verified: false, problems: ["A number wasn't traced."] },
@@ -255,6 +257,8 @@ describe("the answer as Slack text", () => {
       answered: true,
       context: { reading: null, caveats: [] },
       downloads: [],
+      figures: [],
+      title: null,
     });
     // Nor is it drawn as a PDF.
     expect(pdfAnswer(hello)).toBeNull();
@@ -295,6 +299,8 @@ describe("the answer as Slack text", () => {
         answered: true,
         context: { reading: null, caveats: [] },
         downloads: [],
+        figures: [],
+        title: null,
       });
     }
     const two = [one, { question: "Which window?", options: ["Last year", "This year"], multiple: true }];

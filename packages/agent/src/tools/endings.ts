@@ -70,6 +70,23 @@ export const answer = defineTool({
       .max(3)
       .optional()
       .describe("Drawn from one query's cells."),
+    title: z.string().max(80).optional().describe("A short heading, in words"),
+    figures: z
+      .array(
+        z.object({
+          label: z.string().max(40),
+          value: z.string().describe("One reference"),
+          change: z.string().optional().describe("One reference: ⟦pct(q1:0:x,q1:1:x)⟧"),
+          vs: z.string().max(40).optional().describe("vs last week"),
+          detail: z.string().max(120).optional(),
+          group: z.string().max(40).optional(),
+          trend: z.boolean().optional().describe("Its column over time, from its query's date column"),
+          trend_label: z.string().max(30).optional(),
+        }),
+      )
+      .max(9)
+      .optional()
+      .describe("Headline figures, shown as cards"),
     next: z.array(z.string().max(120)).max(3).optional(),
     claims: z
       .array(

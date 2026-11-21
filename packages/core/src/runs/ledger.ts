@@ -12,7 +12,7 @@ import type { PgBoss } from "pg-boss";
 import { type Level, levelFor } from "../ai/catalog";
 import { isProviderKind, type ProviderKind } from "../ai/kinds";
 import type { ResolvedChart } from "../answer/chart";
-import type { AnswerSegment, AnswerSegments, CheckedCrossCheck } from "../answer/gate";
+import type { AnswerSegment, AnswerSegments, CheckedCrossCheck, ResolvedFigure } from "../answer/gate";
 import { BUDGETS } from "../budgets";
 import { type Attachment, checkAttachments, skillCommand } from "../context/attachments";
 import type { ContextUse } from "../context/items";
@@ -1148,6 +1148,10 @@ export type RunOutcome =
       path?: "metric" | "unmodelled";
       /** Charts from the answer's query results, every point a cell (absent before charts existed). */
       charts?: ResolvedChart[];
+      /** A short heading for the answer, in words (absent before headings existed, and when it gave none). */
+      title?: string;
+      /** Its headline figures, every number a cell (absent before figures existed, and when it gave none). */
+      figures?: ResolvedFigure[];
       /** Up to three follow-ups it can answer, as the person would ask them: what it can do instead. */
       next?: string[];
       /** The glossary terms and guides the analyst was given or found, each at its version. */

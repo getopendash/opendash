@@ -14,16 +14,19 @@ type Answer = Extract<RunOutcome, { kind: "answer" }>;
  */
 const FONTS = path.join(process.cwd(), "../../packages/pdf/fonts");
 
-/** The query runs an answer's figures cite, at most 50: their cards name them in the PDF's appendix. */
+/** The query runs an answer's numbers cite (its headline figures' and their trends' too), at most 50: their cards name them in the PDF's appendix. */
 export function citedQueryRuns(answer: Answer): string[] {
+  const figures = answer.figures ?? [];
   return [
-    ...new Set(
-      [
+    ...new Set([
+      ...[
         ...(answer.segments?.markdown ?? []),
         ...(answer.segments?.caveats.flat() ?? []),
         ...(answer.segments?.interpretation.flat() ?? []),
+        ...figures.flatMap((f) => [...f.value, ...(f.change?.segments ?? []), ...(f.detail ?? [])]),
       ].flatMap((s) => ("ref" in s ? s.citations.map((c) => c.queryRunId) : [])),
-    ),
+      ...figures.flatMap((f) => (f.trend?.points ?? []).map((p) => p.cell.queryRunId)),
+    ]),
   ].slice(0, 50);
 }
 

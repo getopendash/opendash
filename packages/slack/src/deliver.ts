@@ -58,6 +58,7 @@ import {
   type Event,
   fileSources,
   fileStem,
+  noticeText,
   pdfAnswer,
   quiet,
   replyBlocks,
@@ -595,7 +596,7 @@ class Reply {
         this.deps.withTenant(orgId, (tx) => checkSlackReplyAttempt(tx, orgId, runId, this.attempt)),
       );
       try {
-        return await send(replyBlocks(said, runId, t.feedback, this.remembered, dm), t.card);
+        return await send(replyBlocks(said, runId, t.feedback, this.remembered, dm, t.card === null), t.card);
       } catch (error) {
         const why = failureCode(error);
         const next = tries[i + 1];
@@ -641,8 +642,8 @@ class Reply {
       last,
       (blocks, withCard) =>
         this.post(part, {
-          // What a notification shows, where blocks can't be.
-          text: markdown.slice(0, 300),
+          // What a notification and a screen reader say, where blocks can't be: its heading and figures too.
+          text: noticeText(said, markdown),
           blocks: [...(withCard ? withCard.blocks : [{ type: "markdown", text: markdown }]), ...(blocks ?? [])],
         }),
       card,

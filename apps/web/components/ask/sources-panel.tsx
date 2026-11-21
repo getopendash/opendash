@@ -351,11 +351,17 @@ export function SourcesPanel({
   // A step on another source means the run read more than one: its query cards name theirs.
   const several = steps.some((s) => s.source);
   const segments = answer?.segments;
+  // Its headline figures' numbers and trends are cited too.
+  const figures = answer?.figures ?? [];
   const citedIds = [
-    ...(segments?.markdown ?? []),
-    ...(segments?.caveats.flat() ?? []),
-    ...(segments?.interpretation.flat() ?? []),
-  ].flatMap((s) => ("ref" in s ? s.citations.map((c) => c.queryRunId) : []));
+    ...[
+      ...(segments?.markdown ?? []),
+      ...(segments?.caveats.flat() ?? []),
+      ...(segments?.interpretation.flat() ?? []),
+      ...figures.flatMap((f) => [...f.value, ...(f.change?.segments ?? []), ...(f.detail ?? [])]),
+    ].flatMap((s) => ("ref" in s ? s.citations.map((c) => c.queryRunId) : [])),
+    ...figures.flatMap((f) => (f.trend?.points ?? []).map((p) => p.cell.queryRunId)),
+  ];
   const cited = new Set(citedIds);
   // The queries that counted the headline another way: listed though the answer doesn't cite them.
   const crossChecks = answer?.crossChecks ?? [];
