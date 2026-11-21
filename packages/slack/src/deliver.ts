@@ -43,6 +43,7 @@ import {
   slackReplyStepsAt,
 } from "@opendash/core";
 import type { PublicTx, TenantTx } from "@opendash/db";
+import { visibleLinks } from "@opendash/markdown";
 import { answerBlocks, chartPng, packageFontDir, pdfFileName, renderPdf } from "@opendash/pdf";
 import type { Chat } from "chat";
 import { askBlocks, buttonText, spelledOut } from "./ask";
@@ -52,9 +53,9 @@ import { cardsAfter, failureCode, READING, type StreamClient, slackError, slackR
 import {
   cardCsv,
   chartAltText,
-  citedQueries,
   downloadsOf,
   type Event,
+  fileSources,
   fileStem,
   pdfAnswer,
   quiet,
@@ -322,16 +323,19 @@ export async function deliverSlackReply(
   }
 }
 
-/** The queries an answer cites, as its asker sees them in OpenDash (query cards): those that ran. */
+/**
+ * An answer's queries, as its asker sees them in OpenDash (query cards): those that ran. One that can't be read is left
+ * out: a file is never worth the answer.
+ */
 async function citedCards(
   deps: Pick<DeliverDeps, "withTenant">,
   viewer: { orgId: string; userId: string },
   ids: string[],
 ): Promise<QueryCard[]> {
-  const cards = await Promise.all(
+  const read = await Promise.allSettled(
     ids.slice(0, 20).map((id) => getQueryCard({ withTenant: deps.withTenant }, viewer, id)),
   );
-  return cards.filter((c): c is QueryCard => c !== null && c.status === "succeeded");
+  return read.flatMap((r) => (r.status === "fulfilled" && r.value?.status === "succeeded" ? [r.value] : []));
 }
 
 /**
@@ -354,7 +358,7 @@ export async function deliverSlackFile(
   const run = await getRun({ withTenant: deps.withTenant }, viewer, job.runId);
   const outcome = run?.outcome;
   if (outcome?.kind !== "answer") return "skipped";
-  const cited = await citedCards(deps, viewer, citedQueries(outcome));
+  const cited = await citedCards(deps, viewer, fileSources(outcome));
   let file: { filename: string; data: Buffer; mimeType: string } | null = null;
   let said = "";
   if (job.file === "pdf") {
@@ -377,16 +381,22 @@ export async function deliverSlackFile(
     if (!card) return "skipped";
     const csv = cardCsv(card);
     file = { filename: csv.filename, data: csv.data, mimeType: "text/csv" };
-    said =
-      card.rows !== null && card.rows > card.preview.length
-        ? `The rows of “${card.title}” as CSV, the first ${card.preview.length} of ${card.rows}.`
+    const kept = card.preview.length;
+    said = card.truncated
+      ? `The rows of “${card.title}” as CSV: the first ${kept}, of a result that was cut short.`
+      : card.rows !== null && card.rows > kept
+        ? `The rows of “${card.title}” as CSV: the first ${kept} of ${card.rows}.`
         : `The rows of “${card.title}” as CSV.`;
   }
+  // Checked again now it's made: one who left meanwhile gets nothing.
+  const still = await deps.withTenant(job.orgId, (tx) => slackReplyOf(tx, job.orgId, job.runId));
+  if (!still?.linked || still.userId !== target.userId) return "skipped";
   const sent = file;
+  // A query's title is the model's words: said with every link's address in sight, notifying nobody.
   await slack.withBotToken(
     workspace.token,
     async () => {
-      await bot.thread(target.slackThreadId).post({ markdown: quiet(said), files: [sent] });
+      await bot.thread(target.slackThreadId).post({ markdown: quiet(visibleLinks(said)), files: [sent] });
     },
     { installationId: target.teamId },
   );
@@ -702,7 +712,8 @@ class Reply {
     const asker = this.target.userId;
     // What its Download menu offers, read as the asker sees them: the answer as a PDF, each cited query's rows.
     const base = replyText(run?.outcome ?? null, run?.status ?? "failed", ask);
-    const cards = base.cited.length ? await citedCards(deps, { orgId: job.orgId, userId: asker }, base.cited) : [];
+    const sources = fileSources(run?.outcome);
+    const cards = sources.length ? await citedCards(deps, { orgId: job.orgId, userId: asker }, sources) : [];
     const said = { ...base, downloads: downloadsOf(job.runId, run?.outcome, cards, deps.maxFiles) };
     this.remembered = deps.withUser
       ? await deps
@@ -786,18 +797,22 @@ class Reply {
       const images = [...plan.images];
       for (const [k, m] of plan.messages.entries()) {
         const part = `charts:${k + 1}`;
-        const went = await this.once(
-          part,
-          () => this.post(part, { text: "The answer's charts", blocks: m.blocks }),
-          false,
-        )
-          .then(() => true)
+        // What a notification and a screen reader say: each chart's title and values, as its image's alt text.
+        const text = m.charts.flatMap((i) => (charts[i] ? [chartAltText(charts[i])] : [])).join("\n");
+        const refusedHere = await this.once(part, () => this.post(part, { text, blocks: m.blocks }), false)
+          .then(() => false)
           .catch((error: unknown) => {
             if (error instanceof SlackReplyFenced) throw error;
-            deps.log?.("slack reply: charts as images", { runId: job.runId, why: failureCode(error) });
-            return false;
+            // Only Slack saying no to these blocks makes them images; anything else may have posted them.
+            const refusal = slackRefusal(error);
+            const no = refusal !== null && !UNSURE.has(refusal);
+            deps.log?.(no ? "slack reply: charts as images" : "slack reply: charts may not have posted", {
+              runId: job.runId,
+              why: failureCode(error),
+            });
+            return no;
           });
-        if (!went) images.push(...m.charts);
+        if (refusedHere) images.push(...m.charts);
       }
       const pictures = images.sort((a, b) => a - b).flatMap((i) => (charts[i] ? [charts[i]] : []));
       if (pictures.length)

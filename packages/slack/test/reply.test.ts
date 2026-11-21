@@ -10,6 +10,7 @@ import {
   chartAltText,
   csvCell,
   downloadsOf,
+  fileSources,
   MAX_MESSAGES,
   MEMORY_UNDO,
   pdfAnswer,
@@ -110,6 +111,17 @@ describe("the answer as Slack text", () => {
     });
   });
 
+  it("says a caveat as Markdown when a plain line would say it otherwise, or there are many", () => {
+    const said = replyText(answer, "succeeded", url);
+    const struck = replyBlocks({ ...said, context: { reading: null, caveats: ["Was ~~12~~ 14 accounts."] } }, "r");
+    expect(struck[0]).toEqual({ type: "markdown", text: "> Was ~~12~~ 14 accounts." });
+    const joined = replyBlocks({ ...said, context: { reading: "**12**_14_", caveats: [] } }, "r");
+    expect(joined[0]).toMatchObject({ type: "markdown" });
+    const many = replyBlocks({ ...said, context: { reading: null, caveats: ["a", "b", "c", "d", "e", "f"] } }, "r");
+    expect(many[0]).toEqual({ type: "markdown", text: "> a\n\n> b\n\n> c\n\n> d\n\n> e\n\n> f" });
+    expect(many.filter((b) => b.type === "context")).toHaveLength(1);
+  });
+
   it("offers the answer's files to download: its PDF, then each cited query with rows", () => {
     const cards = [
       { id: "q-1", title: "MRR by month", preview: [[1]] },
@@ -121,8 +133,28 @@ describe("the answer as Slack text", () => {
     ]);
     // No PDF for a reply with no numbers; at most `max` queries.
     expect(downloadsOf("run-1", { kind: "no_answer", reason: "No data." }, [])).toEqual([]);
-    const many = Array.from({ length: 6 }, (_, i) => ({ id: `q-${i}`, title: `Q${i}`, preview: [[1]] }));
-    expect(downloadsOf("run-1", answer, many)).toHaveLength(5);
+    const many = Array.from({ length: 12 }, (_, i) => ({ id: `q-${i}`, title: `Q${i}`, preview: [[1]] }));
+    expect(downloadsOf("run-1", answer, many)).toHaveLength(11);
+    // A query a chart was drawn from is one of its files too.
+    const point = (queryRunId: string) => ({
+      value: 1,
+      display: "1",
+      cell: { alias: "q9", queryRunId, row: 0, column: "n" },
+    });
+    const charted = {
+      ...answer,
+      charts: [
+        {
+          type: "bar",
+          title: "T",
+          horizontal: false,
+          axis: { compact: true },
+          categories: ["a"],
+          series: [{ name: "n", points: [point("q-9")] }],
+        },
+      ],
+    } as RunOutcome;
+    expect(fileSources(charted)).toEqual(["q-1", "q-2", "q-9"]);
   });
 
   it("puts under it a quiet line, the way into OpenDash and its follow-ups, and 👍/👎 (Slack's own, or plain ones)", () => {

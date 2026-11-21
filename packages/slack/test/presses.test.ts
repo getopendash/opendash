@@ -223,6 +223,9 @@ describe("a press under an answer in Slack", () => {
     expect(await queued()).toEqual([]);
     await deliver(press(a.ts, PRIYA, pick));
     expect(await queued()).toEqual([{ data: { orgId: s.orgId, runId: a.runId, file: "pdf" } }]);
+    // Picked again a moment later (a double press, Slack sending it twice): the same ask, one file.
+    await deliver(press(a.ts, PRIYA, pick));
+    expect(await queued()).toHaveLength(1);
     // A query's rows: the query run it names.
     const q = "0195f3c0-0000-7000-8000-000000000001";
     await deliver(press(a.ts, PRIYA, { ...pick, selected_option: { value: JSON.stringify({ r: a.runId, q }) } }));

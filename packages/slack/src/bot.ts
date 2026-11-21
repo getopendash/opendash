@@ -14,7 +14,7 @@ import {
   connectedSlackTeam,
   type DeploymentKeys,
   dismissInsight,
-  enqueue,
+  enqueueOnce,
   type FeedbackDeps,
   giveFeedback,
   type LedgerDeps,
@@ -457,7 +457,17 @@ export function createSlackBot(deps: SlackBotDeps, config: SlackBotConfig): { bo
       }
       const boss = await deps.boss();
       await deps.withTenant(asker.orgId, (tx) =>
-        enqueue(boss, tx, slackFilesQueue, { orgId: asker.orgId, runId, file }),
+        // A second pick of the same file in a few seconds (a double press, Slack sending it again) is the same ask.
+        enqueueOnce(
+          boss,
+          tx,
+          slackFilesQueue,
+          { orgId: asker.orgId, runId, file },
+          {
+            singletonKey: `${runId}:${file}`,
+            singletonSeconds: 15,
+          },
+        ),
       );
     }),
   );

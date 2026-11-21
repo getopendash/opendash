@@ -164,23 +164,6 @@ export function takeTable(source: string): TakenTable | null {
   const lost = (n: Nodes): boolean =>
     ["image", "imageReference", "linkReference", "footnoteReference"].includes(n.type) ||
     ("children" in n && (n.children as Nodes[]).some(lost));
-  // The cell's pieces of text, a new one at every change of mark: where plain text would join two numbers.
-  const pieces = (parts: Inline[], out: string[] = []): string[] => {
-    for (const p of parts) {
-      if (p.kind === "text" || p.kind === "code") out.push(p.text);
-      else if (p.kind === "break") out.push("\n");
-      else pieces(p.children, out);
-    }
-    return out;
-  };
-  const ends = new RegExp(`[\\p{N}${REF_CLOSE}]$`, "u");
-  const starts = new RegExp(`^[\\p{N}${REF_OPEN}]`, "u");
-  // Also within one piece: a value right beside another, or beside digits.
-  const beside = new RegExp(`${REF_CLOSE}[\\p{N}${REF_OPEN}]|\\p{N}${REF_OPEN}`, "u");
-  const joins = (parts: Inline[]) => {
-    const ps = pieces(parts).filter((t) => t !== "");
-    return ps.some((t, i) => beside.test(t) || (i > 0 && ends.test(ps[i - 1] ?? "") && starts.test(t)));
-  };
   const cell = (c: (typeof node.children)[number]["children"][number]) => {
     const parts = inlines(c.children);
     if (unsaid(parts) || joins(parts) || c.children.some((n) => lost(n as Nodes))) flat = false;
@@ -205,6 +188,52 @@ export function takeTable(source: string): TakenTable | null {
     rows: bodyRows.map(row),
     flat,
   };
+}
+
+/** Inline parts' pieces of text, a new one at every change of mark: where plain text would join two numbers. */
+function pieces(parts: Inline[], out: string[] = []): string[] {
+  for (const p of parts) {
+    if (p.kind === "text" || p.kind === "code") out.push(p.text);
+    else if (p.kind === "break") out.push("\n");
+    else pieces(p.children, out);
+  }
+  return out;
+}
+
+/**
+ * Whether plain text would run two numbers together: two marked pieces side by side (`**12**_14_` as 1214), or, within
+ * a piece, a reference right beside another or beside digits.
+ */
+function joins(parts: Inline[]): boolean {
+  const ends = new RegExp(`[\\p{N}${REF_CLOSE}]$`, "u");
+  const starts = new RegExp(`^[\\p{N}${REF_OPEN}]`, "u");
+  const beside = new RegExp(`${REF_CLOSE}[\\p{N}${REF_OPEN}]|\\p{N}${REF_OPEN}`, "u");
+  const ps = pieces(parts).filter((t) => t !== "");
+  return ps.some((t, i) => beside.test(t) || (i > 0 && ends.test(ps[i - 1] ?? "") && starts.test(t)));
+}
+
+const struck = (parts: Inline[]): boolean =>
+  parts.some((p) => p.kind === "struck" || ("children" in p && struck(p.children)));
+
+/**
+ * Markdown as one line of plain text (marks dropped; a list's, a quote's and a table's text kept), or null when plain
+ * text would say something else: struck text (`~~12~~ 14` would read as a current 12), or two numbers run together.
+ */
+export function flatLine(source: string): string | null {
+  const lines: Inline[][] = [];
+  const code: string[] = [];
+  const walk = (blocks: Block[]) => {
+    for (const b of blocks) {
+      if (b.kind === "paragraph" || b.kind === "heading") lines.push(b.content);
+      else if (b.kind === "list") for (const item of b.items) walk(item);
+      else if (b.kind === "quote") walk(b.children);
+      else if (b.kind === "table") for (const row of [b.head, ...b.rows]) lines.push(...row);
+      else if (b.kind === "code") code.push(b.text);
+    }
+  };
+  walk(parseMarkdown(source));
+  if (lines.some((l) => struck(l) || joins(l))) return null;
+  return [...lines.map(plainText), ...code].join(" ").replace(/\s+/g, " ").trim();
 }
 
 /** Whether markdown defines a link reference (`[g]: https://…`), which a link elsewhere in the text may use. */

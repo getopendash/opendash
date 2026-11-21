@@ -62,6 +62,7 @@ export {
   type Download,
   downloadsOf,
   FEEDBACK_ACTION,
+  fileSources,
   fileStem,
   MAX_MESSAGES,
   MEMORY_UNDO,

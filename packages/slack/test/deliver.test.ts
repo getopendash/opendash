@@ -455,7 +455,8 @@ describe("a run's reply in Slack", () => {
           const files = typeof c.args.files === "string" ? JSON.parse(c.args.files) : c.args.files;
           return (files as { title?: string }[]).map((f) => String(f.title));
         })
-        .filter((title) => title.startsWith("Accounts"));
+        // The chart images, not the files someone asked for.
+        .filter((title) => !/\.(pdf|csv)$/.test(title));
 
     it("puts the answer in as Slack's own table and chart as the stream stops; the chart it can't draw goes as an image", async () => {
       const q = await question();
@@ -583,8 +584,34 @@ describe("a run's reply in Slack", () => {
       const [more] = calls().filter((c) => c.method === "chat.postMessage" && c.args.metadata);
       expect(more?.args.metadata).toMatchObject({ event_payload: { run: q.runId, part: "charts:1" } });
       expect(JSON.stringify(more?.args.blocks)).toContain('"title":"Once more"');
+      // Its words for a notification or a screen reader: the chart's title and values.
+      expect(more?.args.text).toBe("Once more. Growth 12, Scale 7.");
       expect(pngs(calls)).toEqual([]);
     });
+
+    for (const [error, image] of [
+      ["invalid_blocks", true],
+      ["internal_error", false],
+    ] as const) {
+      it(`sends a third chart as an image only when Slack refuses its blocks (${error})`, async () => {
+        const q = await question();
+        const base = tabled(await cited(q.runId)) as Extract<RunOutcome, { kind: "answer" }>;
+        const first = base.charts?.[0];
+        if (!first) throw new Error("no chart");
+        await q.end({ ...base, charts: ["By plan", "Again", "Once more"].map((title) => ({ ...first, title })) });
+        fake.answer("chat.postMessage", (a) =>
+          JSON.stringify(a.metadata ?? "").includes("charts:1") ? { ok: false, error } : null,
+        );
+        const calls = from();
+        try {
+          expect(await deliverSlackReply(deps, slack, q.job)).toBe("done");
+        } finally {
+          fake.answer("chat.postMessage", null);
+        }
+        // Slack may have taken it on an internal error: never sent again as an image then.
+        expect(pngs(calls)).toEqual(image ? ["Once more"] : []);
+      });
+    }
 
     it("says it as today's message whatever Slack's words for refusing the card", async () => {
       const q = await question();

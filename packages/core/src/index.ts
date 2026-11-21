@@ -151,6 +151,7 @@ export { edgesOf, type Reached, walkGraph } from "./graph/walk";
 export {
   createBoss,
   enqueue,
+  enqueueOnce,
   installQueues,
   QUEUE_SCHEMA,
   type QueueRole,
