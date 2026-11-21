@@ -122,6 +122,43 @@ export function parseMarkdown(source: string): Block[] {
   return blocks(tree.children);
 }
 
+/** An answer's first table, taken out of its markdown (`takeTable`). */
+export interface TakenTable {
+  /** The markdown before it and after it, exactly as written. */
+  before: string;
+  after: string;
+  align: Align[];
+  /** Its cells as plain text, every row as wide as its header. */
+  head: string[];
+  rows: string[][];
+}
+
+/**
+ * The first table at the top of an answer's markdown (not one inside a list or a quote), cut out where the parser found
+ * it, so a channel can draw it its own way: the text around it is never rewritten. Null when there's none.
+ */
+export function takeTable(source: string): TakenTable | null {
+  const tree = fromMarkdown(source, { extensions: [gfm()], mdastExtensions: [gfmFromMarkdown()] });
+  const node = tree.children.find((n) => n.type === "table");
+  const start = node?.position?.start.offset;
+  const end = node?.position?.end.offset;
+  if (node?.type !== "table" || start === undefined || end === undefined) return null;
+  const [headRow, ...bodyRows] = node.children;
+  const head = (headRow?.children ?? []).map((c) => plainText(inlines(c.children)).trim());
+  const width = head.length;
+  const row = (r: (typeof node.children)[number]) => {
+    const cells = r.children.slice(0, width).map((c) => plainText(inlines(c.children)).trim());
+    return [...cells, ...Array<string>(width - cells.length).fill("")];
+  };
+  return {
+    before: source.slice(0, start).trimEnd(),
+    after: source.slice(end).trimStart(),
+    align: (node.align ?? []).map((a) => a ?? null),
+    head,
+    rows: bodyRows.map(row),
+  };
+}
+
 /** Inline parts as plain text: marks dropped, a break a newline (for a cell's alignment, a caveat's chip). */
 export function plainText(parts: Inline[]): string {
   return parts

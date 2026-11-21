@@ -3,7 +3,16 @@
 // table cells; where it reads differently from the hand-written readers it replaced, the reading we keep; and which
 // of a table's columns hold numbers.
 import { describe, expect, it } from "vitest";
-import { numericColumns, parseMarkdown, plainText, REF_CLOSE, REF_OPEN, safeHref, visibleLinks } from "../src";
+import {
+  numericColumns,
+  parseMarkdown,
+  plainText,
+  REF_CLOSE,
+  REF_OPEN,
+  safeHref,
+  takeTable,
+  visibleLinks,
+} from "../src";
 
 const ref = (i: number) => `${REF_OPEN}${i}${REF_CLOSE}`;
 const text = (t: string) => ({ kind: "text", text: t });
@@ -122,6 +131,32 @@ describe("an answer's markdown", () => {
     expect(visibleLinks("- [c]: https://x.test/d")).toBe("- ");
     // Link syntax no parser here took as a link is broken up; code is left as written.
     expect(visibleLinks("odd ](https://x.test) and `[k](v)`")).toBe("odd ] (https://x.test) and `[k](v)`");
+  });
+});
+
+describe("an answer's first table, taken out", () => {
+  it("cuts it where the parser found it, the words around it as written, its cells as text as wide as its header", () => {
+    const source =
+      "There are **2** plans:\n\n| Plan | Accounts |\n|:--|--:|\n| **Growth** | 12 |\n| [Scale](https://x.example) |\n\nGrowth _leads_.";
+    expect(takeTable(source)).toEqual({
+      before: "There are **2** plans:",
+      after: "Growth _leads_.",
+      align: ["left", "right"],
+      head: ["Plan", "Accounts"],
+      rows: [
+        ["Growth", "12"],
+        ["Scale", ""],
+      ],
+    });
+  });
+
+  it("takes only the first, at the top: one in a list, a quote or code stays where it is", () => {
+    const second = "| A |\n|---|\n| 1 |\n\n| B |\n|---|\n| 2 |";
+    expect(takeTable(second)).toMatchObject({ before: "", head: ["A"], after: "| B |\n|---|\n| 2 |" });
+    expect(takeTable("- list:\n\n  | A |\n  |---|\n  | 1 |")).toBeNull();
+    expect(takeTable("> | A |\n> |---|\n> | 1 |")).toBeNull();
+    expect(takeTable("```\n| A |\n|---|\n| 1 |\n```")).toBeNull();
+    expect(takeTable("No table, 2 plans.")).toBeNull();
   });
 });
 

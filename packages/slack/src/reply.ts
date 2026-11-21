@@ -215,6 +215,12 @@ export function pdfAnswer(outcome: RunOutcome | null | undefined): Answer | null
   return outcome?.kind === "answer" && outcome.status === "answered" && hasNumbers(outcome) ? outcome : null;
 }
 
+/** What follows an answer's text in Slack, as Markdown: how it read the question, then its caveats. */
+export const answerTail = (outcome: Pick<Answer, "interpretation" | "caveats">): string[] => [
+  ...(outcome.interpretation.length ? [`_${outcome.interpretation.join(" · ")}_`] : []),
+  ...outcome.caveats.map((c) => `> ${c}`),
+];
+
 /** A reply that's only words, with the way into OpenDash. */
 const plain = (body: string, url: string, label = "Open in OpenDash", answered = true): ReplyText => ({
   messages: messages(body, url),
@@ -295,9 +301,7 @@ export function replyText(outcome: RunOutcome | null, status: string, url: strin
     const said = [outcome.rendered.trim(), ...outcome.caveats.map((c) => `> ${c}`)].join("\n\n");
     return { ...plain(said, url), next, rate: true };
   }
-  const lines = [outcome.rendered.trim()];
-  if (outcome.interpretation.length) lines.push(`_${outcome.interpretation.join(" · ")}_`);
-  for (const c of outcome.caveats) lines.push(`> ${c}`);
+  const lines = [outcome.rendered.trim(), ...answerTail(outcome)];
   const facts = [
     outcome.verified
       ? outcome.path === "metric"

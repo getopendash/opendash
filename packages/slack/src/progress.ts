@@ -218,18 +218,24 @@ export function taskCards(client: StreamClient, where: CardsWhere, options: Card
         .catch(() => {});
     },
     /**
-     * The answer, all at once, as the stream stops (with `extra`: its metadata, and blocks under it): the open cards
+     * The answer, all at once, as the stream stops (with `extra`: its metadata, and blocks under it, or the whole
+     * answer as blocks when `markdown` is null): the open cards
      * done first, so none spins on. Returns the message's ts. Throws when Slack didn't take it (the caller looks for
      * it, then posts it the plain way).
      */
-    async finish(markdown: string, extra: Record<string, unknown> = {}): Promise<string> {
+    async finish(markdown: string | null, extra: Record<string, unknown> = {}): Promise<string> {
       await chain;
       const done = open.size ? [...open.values()].map((c): TaskUpdateChunk => ({ ...c, status: "complete" })) : [];
       open.clear();
       // In this message, or a new one when it's too old, Slack closed it, or an earlier step couldn't start one.
       if (done.length || !ts || now() - startedAt >= maxAge) await send(done);
       const stop = (at: string) =>
-        client.chat.stopStream({ channel: where.channel, ts: at, markdown_text: markdown, ...extra });
+        client.chat.stopStream({
+          channel: where.channel,
+          ts: at,
+          ...(markdown === null ? {} : { markdown_text: markdown }),
+          ...extra,
+        });
       let at = ts ?? (await start(replay([])));
       try {
         await stop(at);
