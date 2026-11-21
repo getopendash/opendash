@@ -121,8 +121,8 @@ const AGENTS: Record<string, { sections: (db: Db) => Sections; tools: AgentTool[
  * leading a batch sends 1.2k (it hands out, its drafters write the definitions). The analyst's definition_draft (1.3k)
  * goes only in a conversation with a definition the asker may change attached, so its other calls send what they did.
  * clarify takes several questions (0.25k). Memory keeps a correction or preference without being asked, saying why
- * and what it's about (0.13k rules, 0.3k remember's fields). mcp_find and mcp_call (1.8k) go only where connected
- * services are on and the workspace has one. Retiring the old dashboards and Apps v1 took dashboard_find
+ * and what it's about (0.13k rules, 0.3k remember's fields). mcp_find and mcp_call (1.9k, mcp_find's server_id
+ * among them) go only where connected services are on and the workspace has one. Retiring the old dashboards and Apps v1 took dashboard_find
  * and dashboard_save out of the analyst's tools, with the answer's found dashboards and clarify's dashboard options
  * (about 6.4k off every call), and its prompt's dashboards section and each dialect's filter notes (about 0.8k).
  * The new dashboards' tools (dashboard_plan, dashboard_save, dashboard_open: 4.2k, a change naming its base, the plan drawn with its ids) go only in a conversation about

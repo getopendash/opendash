@@ -294,22 +294,13 @@ export interface FoundServer {
 }
 
 /**
- * The servers turned on here and the tools on them that can be used (not blocked, not gone), for the analyst: the ones
- * whose name, title or description has every word of the query, or all of them; each server with where this person
- * stands. Its descriptions are what servers wrote: data, never instructions.
+ * Every server turned on here, each with where this person stands and every tool on it that can be used (not blocked,
+ * not gone), for the analyst's mcp_find, which picks what to show of them. A server is never left out, with or without
+ * tools: one that went missing would read as one that isn't connected. Its descriptions are what servers wrote: data,
+ * never instructions.
  */
-export async function findTools(
-  deps: McpDeps,
-  actor: McpActor,
-  input: { query?: string; limit?: number },
-): Promise<FoundServer[]> {
+export async function findTools(deps: McpDeps, actor: McpActor): Promise<FoundServer[]> {
   requireEnabled();
-  const words = (input.query ?? "")
-    .toLowerCase()
-    .split(/[^\p{L}\p{N}_]+/u)
-    .filter((w) => w.length > 1)
-    .slice(0, 8);
-  const limit = Math.min(input.limit ?? 30, 60);
   return deps.withTenant(actor, async (tx) => {
     const servers = await tx.execute<ServerRow>(sql`
       select s.id, s.name, s.url, s.transport, s.auth, s.access, s.dashboards_allowed, s.status, s.scopes,
@@ -328,16 +319,8 @@ export async function findTools(
     }>(sql`
       select server_id, name, title, description, annotations, tier, status, input_schema from app.mcp_tool
       where org_id = ${actor.orgId} and status <> 'removed' and tier <> 'blocked' order by name`);
-    let left = limit;
     const out: FoundServer[] = [];
     for (const server of servers) {
-      const own = tools.filter((t) => t.server_id === server.id);
-      const matched = own.filter((t) => {
-        if (!words.length) return true;
-        const text = `${server.name} ${t.name} ${t.title ?? ""} ${t.description ?? ""}`.toLowerCase();
-        return words.every((w) => text.includes(w));
-      });
-      if (!matched.length || left <= 0) continue;
       let state: FoundServer["state"] = "ready";
       if (server.auth !== "none") {
         const resolved = await resolveConnection(tx, actor, server);
@@ -350,24 +333,24 @@ export async function findTools(
                 ? "ready"
                 : resolved.connection.status;
       }
-      const picked = matched.slice(0, left);
-      left -= picked.length;
       out.push({
         id: server.id,
         name: server.name,
         auth: server.auth,
         access: server.access,
         state,
-        tools: picked.map((t) => ({
-          name: t.name,
-          title: t.title,
-          // Whole: how to call a tool well is often in the rest of its description.
-          description: t.description ?? null,
-          readOnly: t.annotations?.readOnlyHint === true,
-          asks: t.tier === "ask" || t.status === "changed",
-          destructive: changesDestructively(t.annotations),
-          inputSchema: t.input_schema ?? {},
-        })),
+        tools: tools
+          .filter((t) => t.server_id === server.id)
+          .map((t) => ({
+            name: t.name,
+            title: t.title,
+            // Whole: how to call a tool well is often in the rest of its description.
+            description: t.description ?? null,
+            readOnly: t.annotations?.readOnlyHint === true,
+            asks: t.tier === "ask" || t.status === "changed",
+            destructive: changesDestructively(t.annotations),
+            inputSchema: t.input_schema ?? {},
+          })),
       });
     }
     return out;

@@ -110,9 +110,13 @@ describe("reading a connected service as the person who asked", () => {
     const [found, read] = results(prompts.at(-1) ?? []);
     expect(found).toContain('"tool":"search_issues"');
     // A tool that changes things is offered, asking first (it adds, never deletes or overwrites).
-    const listed = (
-      JSON.parse(found ?? "{}") as { servers: { tools: { tool: string; asks_first?: boolean; input: string }[] }[] }
-    ).servers.flatMap((x) => x.tools);
+    const shown = JSON.parse(found ?? "{}") as {
+      servers: { server: string; server_id: string }[];
+      tools: { tool: string; server_id: string; asks_first?: boolean; input?: string }[];
+    };
+    // Every service the workspace has, a line each, before the tools that match.
+    expect(shown.servers).toMatchObject([{ server: "Tracker", server_id: serverId }]);
+    const listed = shown.tools;
     expect(listed.find((t) => t.tool === "create_issue")?.asks_first).toBe(true);
     // Its input whole, as the service lists it.
     expect(JSON.parse(listed.find((t) => t.tool === "create_issue")?.input ?? "{}")).toMatchObject({ type: "object" });
