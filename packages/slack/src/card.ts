@@ -1,23 +1,23 @@
 /**
- * An answer as a card in Slack: its first table as Slack's own table (sortable, a page at a time) and up to two of its
- * charts as Slack's own charts, in the message with its words, instead of a Markdown table and images in a later
- * message. Built from the checked answer only: the text is the answer's own (cut around the table where the parser
- * found it, never rewritten), the table's cells are its cells with each number as the gate shows it, a chart's points
- * are the gate's cells. The model writes nothing here. The table is read from the answer's segments with each
- * reference a placeholder, as the page and the PDF read it: a value (a customer's name with a `|` in it, say) is never
- * parsed as Markdown, so it can't move a checked number into another column. The table and charts go through json-render (`toCard`, its limits refusing what Slack
- * would degrade) and the Slack adapter's `cardToBlockKit`; the words stay Slack `markdown` blocks, as today.
+ * An answer in Slack's own elements: its first table as Slack's own table (sortable, a page at a time) and its charts as
+ * Slack's own charts, two in the answer's message and the rest two a message after it, instead of a Markdown table and
+ * images. Only what Slack can't draw as the page does stays as before: a table as Markdown in the words, a chart as its
+ * image. Built from the answer only: the words are its own (cut around the table where the parser found it, never
+ * rewritten), the table's cells are its cells with each value as the gate shows it, a chart's points are the gate's
+ * cells. The model writes nothing here. The table is read from the answer's segments with each reference a
+ * placeholder, as the page and the PDF read it: a value (a name with a `|` in it, say) is never parsed as Markdown, so
+ * it can't move a number into another column. The table and charts go through json-render (`toCard`, its limits
+ * refusing what Slack would degrade) and the Slack adapter's `cardToBlockKit`; the words stay Slack `markdown` blocks.
  *
- * Null whenever a card isn't worth the risk: an answer that didn't pass every check, one too long for one message, one
- * with no table or chart Slack can draw, or one the converter didn't turn into exactly the blocks asked for. The reply
- * is then today's message. Pure, for tests.
+ * No card (today's message) for an answer too long for one message, one with nothing Slack can draw, or one the
+ * converter didn't turn into exactly the blocks asked for. Pure, for tests.
  */
 import { cardToBlockKit, type SlackCardElement } from "@chat-adapter/slack/blocks";
 import { type CardLimits, toCard } from "@json-render/chat";
 import type { Spec } from "@json-render/core";
 import type { AnswerSegment, ResolvedChart, RunOutcome } from "@opendash/core";
 import { hasDefinitions, REF_CLOSE, REF_OPEN, takeTable, visibleLinks } from "@opendash/markdown";
-import { answerTail, hasNumbers, MESSAGE_LIMIT, quiet } from "./reply";
+import { hasNumbers, MESSAGE_LIMIT, quiet } from "./reply";
 
 type Answer = Extract<RunOutcome, { kind: "answer" }>;
 type Block = Record<string, unknown>;
@@ -49,9 +49,9 @@ const LIMITS: CardLimits = {
 export const TABLE_PAGE = 10;
 
 export interface AnswerCard {
-  /** The answer's message as blocks: its words, its table where it was, its charts, then how it read and its caveats. */
+  /** The answer's message as blocks: its words, its table where it was, its first two charts. */
   blocks: Block[];
-  /** Which of the answer's charts (by index) the card draws: the rest go as images, as before. */
+  /** Which of the answer's charts (by index) the card draws: the rest go after it (`chartMessages`). */
   charts: number[];
 }
 
@@ -143,57 +143,25 @@ const tableFits = (head: string[], rows: string[][]) =>
   rows.length + 1 <= SLACK.tableRows &&
   [head, ...rows].flat().reduce((n, c) => n + c.length, 0) <= SLACK.tableChars;
 
-/**
- * The answer as a card, or null for today's message. `address` puts the asker's mention at its start (a channel's
- * thread holding someone else's conversation too), as the plain message's first line has it.
- */
-export function answerCard(
-  outcome: RunOutcome | null | undefined,
-  address?: (markdown: string) => string,
-): AnswerCard | null {
-  const answer: Answer | null = outcome?.kind === "answer" ? outcome : null;
-  if (answer?.status !== "answered" || !answer.verified || answer.problems.length || !hasNumbers(answer)) return null;
-  // An older answer has no segments to read its table from safely: today's message.
-  if (!answer.segments) return null;
-  const segments = answer.segments.markdown;
-  // Text that holds a placeholder's own characters, or an entity the parse turns into one, could take a value that
-  // isn't its own: today's message.
-  const marker = /&#(?:x0*e00[01]|0*5734[45]);/i;
-  if (
-    segments.some(
-      (s) => !("ref" in s) && (s.text.includes(REF_OPEN) || s.text.includes(REF_CLOSE) || marker.test(s.text)),
-    )
-  )
-    return null;
-  // The table is read from the answer as written, each value a placeholder, so nothing in a value or a link can move
-  // a cell; the values go back in after the parse.
-  const { source, fill } = withPlaceholders(segments);
-  const body = source.trim();
-  // A link that uses a definition elsewhere (`[g]: https://…`) is shown with its address only when the whole reply is
-  // read at once, as today's message reads it: that one, then.
-  if ([body, ...answer.interpretation, ...answer.caveats].some(hasDefinitions)) return null;
-  const taken = takeTable(body);
-  const cells = taken && { head: taken.head.map(fill), rows: taken.rows.map((r) => r.map(fill)) };
-  const table = taken?.flat && cells && tableFits(cells.head, cells.rows) ? { ...taken, ...cells } : null;
-  const charts: { index: number; props: Record<string, unknown> }[] = [];
+/** The answer's charts Slack can draw as its own, in order: a second whose title reads the same once cut is left out. */
+function natives(answer: Answer): { index: number; props: Record<string, unknown> }[] {
+  const found: { index: number; props: Record<string, unknown> }[] = [];
   for (const [index, chart] of (answer.charts ?? []).entries()) {
-    if (charts.length >= SLACK.charts) break;
     const props = nativeChart(chart);
-    // Two charts whose titles read the same once cut can't be told apart: the second stays an image.
-    if (props && !charts.some((c) => c.props.title === props.title)) charts.push({ index, props });
+    if (props && !found.some((c) => c.props.title === props.title)) found.push({ index, props });
   }
-  if (!table && !charts.length) return null;
+  return found;
+}
 
-  // The words, as the plain message says them (mentions quieted, every link's address in sight, values included), in
-  // one message.
-  const said = (markdown: string) => quiet(visibleLinks(fill(markdown)));
-  const before = said(table ? table.before : body);
-  const after = table ? said(table.after) : "";
-  const tail = quiet(visibleLinks(answerTail(answer).join("\n\n")));
-  if ([before, after, tail].join("\n\n").length > MESSAGE_LIMIT) return null;
-  const lead = address ? address(before) : before;
-
-  // The table and the charts as one json-render spec of literal props (no state, no expressions), in order.
+/**
+ * A table and charts as Slack's own blocks, through one json-render spec of literal props (no state, no expressions),
+ * in order; null unless the adapter made exactly the blocks asked for (it turns what Slack can't draw into a code
+ * block rather than refusing it).
+ */
+function slackBlocks(
+  table: { head: string[]; rows: string[][] } | null,
+  charts: { props: Record<string, unknown> }[],
+): Block[] | null {
   const elements: Spec["elements"] = {};
   const order: string[] = [];
   if (table) {
@@ -217,17 +185,85 @@ export function answerCard(
   } catch {
     return null;
   }
-  // Exactly the blocks asked for: the adapter turns what Slack can't draw into a code block rather than refusing it.
   const kinds = converted.map((b) => b.type);
   const want = [...(table ? ["data_table"] : []), ...charts.map(() => "data_visualization")];
   if (kinds.length !== want.length || kinds.some((k, i) => k !== want[i])) return null;
+  if (table && converted[0]) converted[0].page_size = Math.min(table.rows.length, TABLE_PAGE);
+  return converted;
+}
+
+/**
+ * The answer as a card, or null for today's message. `address` puts the asker's mention at its start (a channel's
+ * thread holding someone else's conversation too), as the plain message's first line has it. One that didn't pass
+ * every check is a card too: what was checked says so under it, as the page draws its charts all the same.
+ */
+export function answerCard(
+  outcome: RunOutcome | null | undefined,
+  address?: (markdown: string) => string,
+): AnswerCard | null {
+  const answer: Answer | null = outcome?.kind === "answer" ? outcome : null;
+  if (answer?.status !== "answered" || !hasNumbers(answer)) return null;
+  // An older answer has no segments to read its table from safely: today's message.
+  if (!answer.segments) return null;
+  const segments = answer.segments.markdown;
+  // Text that holds a placeholder's own characters, or an entity the parse turns into one, could take a value that
+  // isn't its own: today's message.
+  const marker = /&#(?:x0*e00[01]|0*5734[45]);/i;
+  if (
+    segments.some(
+      (s) => !("ref" in s) && (s.text.includes(REF_OPEN) || s.text.includes(REF_CLOSE) || marker.test(s.text)),
+    )
+  )
+    return null;
+  // The table is read from the answer as written, each value a placeholder, so nothing in a value or a link can move
+  // a cell; the values go back in after the parse.
+  const { source, fill } = withPlaceholders(segments);
+  const body = source.trim();
+  // A link that uses a definition elsewhere (`[g]: https://…`) is shown with its address only when the whole reply is
+  // read at once, as today's message reads it: that one, then.
+  if ([body, ...answer.interpretation, ...answer.caveats].some(hasDefinitions)) return null;
+  const taken = takeTable(body);
+  const cells = taken && { head: taken.head.map(fill), rows: taken.rows.map((r) => r.map(fill)) };
+  const table = taken?.flat && cells && tableFits(cells.head, cells.rows) ? { ...taken, ...cells } : null;
+  const charts = natives(answer).slice(0, SLACK.charts);
+  if (!table && !charts.length) return null;
+
+  // The words, as the plain message says them (mentions quieted, every link's address in sight, values included), in
+  // one message. How it read the question and its caveats go under them, as for every answer (`replyBlocks`).
+  const said = (markdown: string) => quiet(visibleLinks(fill(markdown)));
+  const before = said(table ? table.before : body);
+  const after = table ? said(table.after) : "";
+  if ([before, after].join("\n\n").length > MESSAGE_LIMIT) return null;
+  const lead = address ? address(before) : before;
+  const converted = slackBlocks(table, charts);
+  if (!converted) return null;
   const tableBlock = table ? converted[0] : undefined;
   const chartBlocks = table ? converted.slice(1) : converted;
-  if (table && tableBlock) tableBlock.page_size = Math.min(table.rows.length, TABLE_PAGE);
-
   const md = (text: string): Block[] => (text.trim() ? [{ type: "markdown", text }] : []);
   return {
-    blocks: [...md(lead), ...(tableBlock ? [tableBlock] : []), ...md(after), ...chartBlocks, ...md(tail)],
+    blocks: [...md(lead), ...(tableBlock ? [tableBlock] : []), ...md(after), ...chartBlocks],
     charts: charts.map((c) => c.index),
   };
+}
+
+/**
+ * The answer's charts its card didn't draw (`drawn`): Slack's own where it can draw them, two a message (its limit),
+ * and the rest as images (`images`, by index): more points than Slack takes, a gap, labels it can't tell apart.
+ */
+export function chartMessages(
+  outcome: RunOutcome | null | undefined,
+  drawn: number[],
+): { messages: { blocks: Block[]; charts: number[] }[]; images: number[] } {
+  const answer: Answer | null = outcome?.kind === "answer" ? outcome : null;
+  const all = (answer?.charts ?? []).map((_, i) => i).filter((i) => !drawn.includes(i));
+  if (!answer) return { messages: [], images: [] };
+  const left = natives(answer).filter((c) => !drawn.includes(c.index));
+  const messages: { blocks: Block[]; charts: number[] }[] = [];
+  for (let at = 0; at < left.length; at += SLACK.charts) {
+    const group = left.slice(at, at + SLACK.charts);
+    const blocks = slackBlocks(null, group);
+    if (blocks) messages.push({ blocks, charts: group.map((c) => c.index) });
+  }
+  const native = new Set(messages.flatMap((m) => m.charts));
+  return { messages, images: all.filter((i) => !native.has(i)) };
 }

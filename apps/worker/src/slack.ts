@@ -10,7 +10,9 @@ import {
   deploymentKeys,
   loggableError,
   type SecretStore,
+  type SlackFilesJob,
   type SlackReplyJob,
+  slackFilesQueue,
   slackInboundDeadLetter,
   slackInboundQueue,
   slackRemovedBySlack,
@@ -22,6 +24,7 @@ import { emailLinkOrigin } from "@opendash/email";
 import {
   abandonSlackReply,
   createSlackBot,
+  deliverSlackFile,
   deliverSlackReply,
   gateSlackEvent,
   publishSlackHome,
@@ -121,7 +124,7 @@ export async function startSlack(ctx: {
     if (!job) return;
     const signal = AbortSignal.any([job.signal, ctx.drain]);
     try {
-      const status = await deliverSlackReply({ ...deps, log: ctx.log }, bot, slack, job.data, signal);
+      const status = await deliverSlackReply({ ...deps, log: ctx.log }, slack, job.data, signal);
       ctx.log("slack reply", { runId: job.data.runId, status });
     } catch (error) {
       // Thrown, so pg-boss gives it to the next attempt: a hand-off at a shutdown, or a failure to try again.
@@ -129,11 +132,17 @@ export async function startSlack(ctx: {
       throw error;
     }
   });
+  // A file asked for from an answer's Download menu, posted in its thread.
+  await ctx.boss.work<SlackFilesJob>(slackFilesQueue.name, { localConcurrency: 2 }, async ([job]) => {
+    if (!job) return;
+    const status = await deliverSlackFile({ ...deps, log: ctx.log }, bot, slack, job.data);
+    ctx.log("slack file", { runId: job.data.runId, file: job.data.file.startsWith("csv:") ? "csv" : "pdf", status });
+  });
   // The queue gave up on it: the person is told where the answer is, if the reply is still unfinished.
   await ctx.boss.work<SlackReplyJob>(slackReplyDeadLetter.name, async ([job]) => {
     if (!job) return;
     // Thrown, the dead letter's own retries tell them; the reply's attempt fence keeps it to one notice.
-    const told = await abandonSlackReply({ ...deps, log: ctx.log }, bot, slack, job.data);
+    const told = await abandonSlackReply({ ...deps, log: ctx.log }, slack, job.data);
     ctx.log("slack reply failed", { runId: job.data.runId, told });
   });
   ctx.log("slack ready", { events: setup.socket ? "socket" : "https" });

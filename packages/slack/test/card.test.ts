@@ -5,7 +5,7 @@
 // would degrade means no card.
 import type { ResolvedChart, RunOutcome } from "@opendash/core";
 import { describe, expect, it } from "vitest";
-import { answerCard, hundredfold, nativeChart, shorten, TABLE_PAGE } from "../src/card";
+import { answerCard, chartMessages, hundredfold, nativeChart, shorten, TABLE_PAGE } from "../src/card";
 
 type Ref = { ref: string; display: string; kind: "text"; citations: [] };
 /** A reference as the gate leaves it in the segments: what it shows. */
@@ -63,11 +63,11 @@ describe("an answer's card", () => {
       }),
     );
     expect(card?.charts).toEqual([]);
-    expect(card?.blocks.map((b) => b.type)).toEqual(["markdown", "data_table", "markdown", "markdown"]);
-    const [before, table, after, tail] = card?.blocks ?? [];
+    // How it read the question and its caveats go under it, as for every answer (`replyBlocks`).
+    expect(card?.blocks.map((b) => b.type)).toEqual(["markdown", "data_table", "markdown"]);
+    const [before, table, after] = card?.blocks ?? [];
     expect(before?.text).toBe("There are **2** plans:");
     expect(after?.text).toBe("Growth leads.");
-    expect(tail?.text).toBe("_All plans_\n\n> Trials left out.");
     // Its cells as written (raw text, so nothing in them is markup), a page of them at a time.
     expect(table).toMatchObject({ type: "data_table", page_size: 2 });
     expect(JSON.stringify(table)).not.toContain("|");
@@ -218,10 +218,13 @@ describe("an answer's card", () => {
     expect(card?.charts).toEqual([2]);
   });
 
-  it("is today's message for an answer that didn't pass, couldn't answer, has no numbers or nothing to draw", () => {
+  it("is a card for an answer that didn't pass every check too: what was checked says so under it", () => {
+    const card = answerCard(answer(TABLE, { verified: false, problems: ["A number isn't from a query."] }));
+    expect(card?.blocks.map((b) => b.type)).toEqual(["data_table"]);
+  });
+
+  it("is today's message for an answer that couldn't answer, has no numbers or nothing to draw", () => {
     const drawable = { charts: [chart()] };
-    expect(answerCard(answer(TABLE, { verified: false, ...drawable }))).toBeNull();
-    expect(answerCard(answer(TABLE, { problems: ["A number isn't from a query."], ...drawable }))).toBeNull();
     expect(answerCard(answer(TABLE, { status: "cannot_answer", ...drawable }))).toBeNull();
     expect(answerCard(answer(TABLE, { citations: [] }))).toBeNull();
     expect(answerCard(answer("Just words, 2 plans."))).toBeNull();
@@ -233,6 +236,32 @@ describe("an answer's card", () => {
     expect(answerCard(answer(`| Plan | Accounts |\n|---|---:|\n${rows}`))).toBeNull();
     // Too long for one message.
     expect(answerCard(answer(`${"Long. ".repeat(2_000)}\n\n${TABLE}`))).toBeNull();
+  });
+});
+
+describe("an answer's other charts", () => {
+  it("are Slack's own, two a message, after the card's; the ones Slack can't draw are images", () => {
+    const many = Array.from({ length: 21 }, (_, i) => i);
+    const charts = [
+      chart({ title: "One" }),
+      chart({ title: "Two" }),
+      chart({ title: "Three" }),
+      chart({ title: "Gap" }, [12, null]),
+      chart({ title: "Long", categories: many.map((i) => `Plan ${i}`) }, many),
+      chart({ title: "Four" }),
+      chart({ title: "Five" }),
+    ];
+    const outcome = answer("Charts.", { charts });
+    expect(answerCard(outcome)?.charts).toEqual([0, 1]);
+    const after = chartMessages(outcome, [0, 1]);
+    expect(after.messages.map((m) => m.charts)).toEqual([[2, 5], [6]]);
+    expect(after.messages.map((m) => m.blocks.map((b) => b.type))).toEqual([
+      ["data_visualization", "data_visualization"],
+      ["data_visualization"],
+    ]);
+    expect(after.images).toEqual([3, 4]);
+    // With no card (an answer too long for one message, say), every chart Slack can draw goes this way.
+    expect(chartMessages(outcome, []).messages.flatMap((m) => m.charts)).toEqual([0, 1, 2, 5, 6]);
   });
 });
 

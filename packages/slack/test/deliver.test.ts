@@ -19,6 +19,7 @@ import {
   addressed,
   createSlackBot,
   type DeliverDeps,
+  deliverSlackFile,
   deliverSlackReply,
   REPLY_EVENT,
   SlackReplyHandOff,
@@ -196,7 +197,7 @@ describe("a run's reply in Slack", () => {
   it("shows its steps as task cards in one message, and puts the answer in as the stream stops, marked", async () => {
     const q = await question();
     const calls = from();
-    const delivered = deliverSlackReply(deps, bot, slack, q.job);
+    const delivered = deliverSlackReply(deps, slack, q.job);
     await q.event("tool_started", { callId: "c1", tool: "sql_query", input: { title: "Plans", sql: "select 1" } });
     await until(() => calls().some((c) => c.method === "chat.appendStream"));
     await q.event("tool_result", { callId: "c1", tool: "sql_query", status: "succeeded", rows: 2 });
@@ -246,7 +247,7 @@ describe("a run's reply in Slack", () => {
 
     // Done once: a retried job sends nothing.
     const again = from();
-    expect(await deliverSlackReply(deps, bot, slack, q.job)).toBe("skipped");
+    expect(await deliverSlackReply(deps, slack, q.job)).toBe("skipped");
     expect(again()).toEqual([]);
   });
 
@@ -264,7 +265,7 @@ describe("a run's reply in Slack", () => {
       },
     };
     try {
-      expect(await deliverSlackReply(leaving, bot, slack, q.job)).toBe("skipped");
+      expect(await deliverSlackReply(leaving, slack, q.job)).toBe("skipped");
       expect(JSON.stringify(calls())).not.toContain("Plans grew by 4");
       expect(await reply(q.runId)).toMatchObject({ status: "failed" });
     } finally {
@@ -278,7 +279,7 @@ describe("a run's reply in Slack", () => {
     await s.t.owner`delete from app.slack_identity where org_id = ${s.orgId} and slack_user_id = 'UPRIYA'`;
     try {
       const calls = from();
-      expect(await deliverSlackReply(deps, bot, slack, q.job)).toBe("skipped");
+      expect(await deliverSlackReply(deps, slack, q.job)).toBe("skipped");
       expect(calls().filter((c) => c.method !== "auth.test")).toEqual([]);
       expect(await reply(q.runId)).toMatchObject({ status: "failed" });
     } finally {
@@ -305,7 +306,7 @@ describe("a run's reply in Slack", () => {
     fake.answer("chat.startStream", () => ({ ok: false, error: "not_allowed" }));
     const calls = from();
     try {
-      const delivered = deliverSlackReply(deps, bot, slack, q.job);
+      const delivered = deliverSlackReply(deps, slack, q.job);
       await q.event("tool_started", { callId: "c1", tool: "sql_query", input: { title: "Plans" } });
       await until(() =>
         calls().some((c) => c.method === "assistant.threads.setStatus" && c.args.status === "Running “Plans”…"),
@@ -356,7 +357,7 @@ describe("a run's reply in Slack", () => {
       unfurl_links: "false",
       unfurl_media: "false",
     });
-    const [body, drawn, read, checked] = (posted?.args.blocks ?? []) as {
+    const [body, drawn, read, line, checked, buttons] = (posted?.args.blocks ?? []) as {
       type: string;
       text?: string;
       title?: string;
@@ -378,15 +379,28 @@ describe("a run's reply in Slack", () => {
         ],
       },
     });
-    expect(read).toEqual({ type: "markdown", text: "_All plans_" });
-    expect(checked?.elements?.[0]?.text).toBe("Every number checked against its query");
-    // The chart is in the answer, so it isn't sent again as an image: the PDF and the CSV.
+    // How it read the question as a quiet line, a divider, what was checked; its files only from the Download menu.
+    expect(read).toEqual({ type: "context", elements: [{ type: "plain_text", text: "All plans", emoji: true }] });
+    expect(line).toEqual({ type: "divider" });
+    expect(checked?.elements?.[0]?.text).toBe("✅ Every number checked against its query");
+    expect(JSON.stringify(buttons)).toContain('"opendash:download"');
+    for (const label of ["PDF of this answer", "CSV: Plans"]) expect(JSON.stringify(buttons)).toContain(label);
+    // The chart is in the answer, so it isn't sent again as an image; no file is sent unasked.
+    expect(calls().some((c) => c.method === "files.getUploadURLExternal")).toBe(false);
+    expect(answers(q.runId)).toHaveLength(1);
+
+    // Asked for from its menu: each file posted in the thread, as the asker sees it.
+    const files = from();
+    const queryFile = `csv:${queryRunId}` as const;
+    expect(await deliverSlackFile(deps, bot, slack, { ...q.job, file: "pdf" })).toBe("done");
+    expect(await deliverSlackFile(deps, bot, slack, { ...q.job, file: queryFile })).toBe("done");
+    // Only a query the answer cites.
+    expect(await deliverSlackFile(deps, bot, slack, { ...q.job, file: `csv:${uuidv7()}` })).toBe("skipped");
     expect(
-      calls()
+      files()
         .filter((c) => c.method === "files.getUploadURLExternal")
         .map((c) => c.args.filename),
     ).toEqual(["how-many-plans-are-there.pdf", "plans.csv"]);
-    expect(answers(q.runId)).toHaveLength(1);
   });
 
   describe("as a card", () => {
@@ -447,7 +461,7 @@ describe("a run's reply in Slack", () => {
       const q = await question();
       await q.end(tabled(await cited(q.runId)));
       const calls = from();
-      expect(await deliverSlackReply(deps, bot, slack, q.job)).toBe("done");
+      expect(await deliverSlackReply(deps, slack, q.job)).toBe("done");
       const [stop] = calls().filter((c) => c.method === "chat.stopStream");
       // The whole answer as blocks, no markdown text beside them: its words, the table where it was, the chart.
       expect(stop?.args.markdown_text).toBeUndefined();
@@ -487,7 +501,7 @@ describe("a run's reply in Slack", () => {
       );
       const calls = from();
       try {
-        expect(await deliverSlackReply(deps, bot, slack, q.job)).toBe("done");
+        expect(await deliverSlackReply(deps, slack, q.job)).toBe("done");
       } finally {
         fake.answer("chat.stopStream", null);
       }
@@ -511,7 +525,7 @@ describe("a run's reply in Slack", () => {
       const calls = from();
       try {
         expect(
-          await deliverSlackReply({ ...deps, log: (msg, fields) => void said.push([msg, fields]) }, bot, slack, q.job),
+          await deliverSlackReply({ ...deps, log: (msg, fields) => void said.push([msg, fields]) }, slack, q.job),
         ).toBe("done");
       } finally {
         fake.answer("chat.stopStream", null);
@@ -532,7 +546,8 @@ describe("a run's reply in Slack", () => {
     const earlier = [
       { left: ["card", "answer"], images: ["Accounts with a gap"], why: "sent as a card" },
       { left: ["card", "card_refused", "answer"], images: ["Accounts by plan", "Accounts with a gap"], why: "refused" },
-      { left: ["answer"], images: ["Accounts by plan", "Accounts with a gap"], why: "sent with no mark, before cards" },
+      // Not a card: its drawable chart goes as Slack's own after it, the other as an image.
+      { left: ["answer"], images: ["Accounts with a gap"], why: "sent with no mark, before cards" },
     ];
     for (const e of earlier) {
       it(`sends a later attempt's images by what the earlier answer was (${e.why})`, async () => {
@@ -543,11 +558,33 @@ describe("a run's reply in Slack", () => {
             values (${s.orgId}, ${q.runId}, ${part}, 'posted', ${part === "answer" ? "1791799999.000200" : null}, now())`;
         }
         const calls = from();
-        expect(await deliverSlackReply(deps, bot, slack, q.job)).toBe("done");
+        expect(await deliverSlackReply(deps, slack, q.job)).toBe("done");
         expect(calls().some((c) => c.method === "chat.stopStream" && c.args.metadata)).toBe(false);
         expect(pngs(calls)).toEqual(e.images);
+        // Sent without a card, the chart Slack can draw follows it as Slack's own.
+        const native = calls().filter(
+          (c) => c.method === "chat.postMessage" && JSON.stringify(c.args.metadata ?? "").includes("charts:1"),
+        );
+        expect(native).toHaveLength(e.why.startsWith("sent with no mark") ? 1 : 0);
       });
     }
+
+    it("puts a third chart Slack can draw in a message of its own after the answer, as Slack's own", async () => {
+      const q = await question();
+      const queryRunId = await cited(q.runId);
+      const base = tabled(queryRunId) as Extract<RunOutcome, { kind: "answer" }>;
+      const first = base.charts?.[0];
+      if (!first) throw new Error("no chart");
+      await q.end({ ...base, charts: ["By plan", "Again", "Once more"].map((title) => ({ ...first, title })) });
+      const calls = from();
+      expect(await deliverSlackReply(deps, slack, q.job)).toBe("done");
+      const [stop] = calls().filter((c) => c.method === "chat.stopStream" && c.args.metadata);
+      expect(JSON.stringify(stop?.args.blocks).match(/"data_visualization"/g)).toHaveLength(2);
+      const [more] = calls().filter((c) => c.method === "chat.postMessage" && c.args.metadata);
+      expect(more?.args.metadata).toMatchObject({ event_payload: { run: q.runId, part: "charts:1" } });
+      expect(JSON.stringify(more?.args.blocks)).toContain('"title":"Once more"');
+      expect(pngs(calls)).toEqual([]);
+    });
 
     it("says it as today's message whatever Slack's words for refusing the card", async () => {
       const q = await question();
@@ -557,7 +594,7 @@ describe("a run's reply in Slack", () => {
       );
       const calls = from();
       try {
-        expect(await deliverSlackReply(deps, bot, slack, q.job)).toBe("done");
+        expect(await deliverSlackReply(deps, slack, q.job)).toBe("done");
       } finally {
         fake.answer("chat.stopStream", null);
       }
@@ -576,7 +613,7 @@ describe("a run's reply in Slack", () => {
       );
       const calls = from();
       try {
-        expect(await deliverSlackReply(deps, bot, slack, q.job)).toBe("done");
+        expect(await deliverSlackReply(deps, slack, q.job)).toBe("done");
       } finally {
         fake.answer("chat.stopStream", null);
       }
@@ -602,7 +639,7 @@ describe("a run's reply in Slack", () => {
       const said: unknown[][] = [];
       const calls = from();
       expect(
-        await deliverSlackReply({ ...deps, log: (msg, fields) => void said.push([msg, fields]) }, bot, slack, q.job),
+        await deliverSlackReply({ ...deps, log: (msg, fields) => void said.push([msg, fields]) }, slack, q.job),
       ).toBe("done");
       const [stop] = calls().filter((c) => c.method === "chat.stopStream" && c.args.metadata);
       expect(stop?.args.markdown_text).toBe("There are **2** plans.");
@@ -627,7 +664,6 @@ describe("a run's reply in Slack", () => {
               await s.t.owner`update app.slack_reply set attempt = attempt + 1 where run_id = ${q.runId}`;
             },
           },
-          bot,
           slack,
           q.job,
         );
@@ -648,7 +684,7 @@ describe("a run's reply in Slack", () => {
           values (${s.orgId}, ${q.runId}, ${part}, 'posted', now())`;
       }
       const calls = from();
-      expect(await deliverSlackReply(deps, bot, slack, q.job)).toBe("done");
+      expect(await deliverSlackReply(deps, slack, q.job)).toBe("done");
       const stops = calls().filter((c) => c.method === "chat.stopStream" && c.args.metadata);
       expect(stops.map((c) => typeof c.args.markdown_text)).toEqual(["string"]);
       expect(JSON.stringify(stops[0]?.args.blocks)).not.toMatch(/data_table|data_visualization/);
@@ -664,7 +700,7 @@ describe("a run's reply in Slack", () => {
     fake.answer("chat.postMessage", (a) => (a.blocks ? { ok: false, error: "invalid_blocks" } : null));
     const calls = from();
     try {
-      expect(await deliverSlackReply({ ...deps, log: (msg, f) => void said.push([msg, f]) }, bot, slack, q.job)).toBe(
+      expect(await deliverSlackReply({ ...deps, log: (msg, f) => void said.push([msg, f]) }, slack, q.job)).toBe(
         "done",
       );
     } finally {
@@ -688,7 +724,7 @@ describe("a run's reply in Slack", () => {
     );
     const calls = from();
     try {
-      expect(await deliverSlackReply(deps, bot, slack, q.job)).toBe("done");
+      expect(await deliverSlackReply(deps, slack, q.job)).toBe("done");
     } finally {
       fake.answer("chat.stopStream", null);
     }
@@ -708,7 +744,7 @@ describe("a run's reply in Slack", () => {
       ],
     });
     const calls = from();
-    expect(await deliverSlackReply(deps, bot, slack, q.job)).toBe("done");
+    expect(await deliverSlackReply(deps, slack, q.job)).toBe("done");
     const [stop] = calls().filter((c) => c.method === "chat.stopStream");
     expect(String(stop?.args.markdown_text)).toMatch(/^A few questions before I answer:/);
     const [form] = calls().filter((c) => c.method === "chat.postMessage");
@@ -742,13 +778,12 @@ describe("a reply posted once", () => {
             return new Promise<void>(() => {});
           },
         },
-        bot,
         slack,
         q.job,
       );
       await until(() => reached);
       const calls = from();
-      expect(await deliverSlackReply(deps, bot, slack, q.job)).toBe("done");
+      expect(await deliverSlackReply(deps, slack, q.job)).toBe("done");
       expect(answers(q.runId)).toHaveLength(1);
       expect(await reply(q.runId)).toMatchObject({ status: "done", attempt: 2 });
       expect(all().filter((c) => c.method === "chat.startStream")).toHaveLength(1);
@@ -777,7 +812,7 @@ describe("a reply posted once", () => {
       metadata: { event_type: REPLY_EVENT, event_payload: { run: q.runId, part: "answer" } },
     });
     const calls = from();
-    expect(await deliverSlackReply(deps, bot, slack, q.job)).toBe("done");
+    expect(await deliverSlackReply(deps, slack, q.job)).toBe("done");
     // The run had ended (its answer was begun) and no steps were shown: none now.
     expect(calls().some((c) => c.method === "chat.startStream")).toBe(false);
     // The answer was posted all the same, by OpenDash.
@@ -802,12 +837,11 @@ describe("a reply posted once", () => {
           });
         },
       },
-      bot,
       slack,
       q.job,
     );
     await until(() => reached);
-    expect(await deliverSlackReply(deps, bot, slack, q.job)).toBe("done");
+    expect(await deliverSlackReply(deps, slack, q.job)).toBe("done");
     resume();
     expect(await older).toBe("skipped");
     expect(answers(q.runId)).toHaveLength(1);
@@ -817,7 +851,7 @@ describe("a reply posted once", () => {
     const q = await question();
     const drain = new AbortController();
     const calls = from();
-    const handing = deliverSlackReply(deps, bot, slack, q.job, drain.signal);
+    const handing = deliverSlackReply(deps, slack, q.job, drain.signal);
     await until(() => calls().some((c) => c.method === "chat.startStream"));
     drain.abort();
     await expect(handing).rejects.toBeInstanceOf(SlackReplyHandOff);
@@ -826,7 +860,7 @@ describe("a reply posted once", () => {
     expect(calls().some((c) => c.method === "chat.stopStream")).toBe(false);
     expect(await reply(q.runId)).toMatchObject({ status: "streaming", failures: 0 });
     await q.end(answer("Answered after the hand-off."));
-    expect(await deliverSlackReply(deps, bot, slack, q.job)).toBe("done");
+    expect(await deliverSlackReply(deps, slack, q.job)).toBe("done");
     expect(answers(q.runId)).toHaveLength(1);
     // The next attempt carried on in the same message, and put the answer in it.
     const ours = fake.messages.filter((m) => m.thread_ts === q.ts && m.user === "U0BOT");
@@ -850,14 +884,13 @@ describe("a reply posted once", () => {
           return new Promise<void>(() => {});
         },
       },
-      bot,
       slack,
       q.job,
     );
     await until(() => reached);
     fake.answer("chat.appendStream", () => ({ ok: false, error: "message_not_in_streaming_state" }));
     try {
-      expect(await deliverSlackReply(deps, bot, slack, q.job)).toBe("done");
+      expect(await deliverSlackReply(deps, slack, q.job)).toBe("done");
     } finally {
       fake.answer("chat.appendStream", null);
     }
@@ -881,9 +914,9 @@ describe("a reply posted once", () => {
       JSON.stringify(a.blocks ?? "").includes("Slack keeps") ? { ok: false, error: "internal_error" } : null,
     );
     try {
-      for (let i = 0; i < 2; i++) await expect(deliverSlackReply(deps, bot, slack, q.job)).rejects.toThrow();
+      for (let i = 0; i < 2; i++) await expect(deliverSlackReply(deps, slack, q.job)).rejects.toThrow();
       expect(await reply(q.runId)).toMatchObject({ status: "streaming", failures: 2, error: "internal_error" });
-      expect(await deliverSlackReply(deps, bot, slack, q.job)).toBe("failed");
+      expect(await deliverSlackReply(deps, slack, q.job)).toBe("failed");
     } finally {
       fake.answer("chat.startStream", null);
       fake.answer("chat.postMessage", null);
@@ -902,7 +935,7 @@ describe("a reply posted once", () => {
     fake.answer("chat.startStream", () => ({ ok: false, error: "channel_not_found" }));
     fake.answer("chat.postMessage", () => ({ ok: false, error: "channel_not_found" }));
     try {
-      expect(await deliverSlackReply(deps, bot, slack, q.job)).toBe("failed");
+      expect(await deliverSlackReply(deps, slack, q.job)).toBe("failed");
     } finally {
       fake.answer("chat.startStream", null);
       fake.answer("chat.postMessage", null);
@@ -914,13 +947,13 @@ describe("a reply posted once", () => {
     const q = await question();
     // An attempt handed off with its steps open, and none came after.
     const drain = new AbortController();
-    const handing = deliverSlackReply(deps, bot, slack, q.job, drain.signal);
+    const handing = deliverSlackReply(deps, slack, q.job, drain.signal);
     const calls = from();
     await until(() => calls().some((c) => c.method === "chat.startStream"));
     drain.abort();
     await expect(handing).rejects.toBeInstanceOf(SlackReplyHandOff);
     await q.end(answer("Never posted."));
-    expect(await abandonSlackReply(deps, bot, slack, q.job)).toBe(true);
+    expect(await abandonSlackReply(deps, slack, q.job)).toBe(true);
     // Its steps stopped as they were.
     const [steps] = await s.t.owner<{ ts: string }[]>`
       select ts from app.slack_reply_message where run_id = ${q.runId} and part = 'steps'`;
@@ -931,7 +964,7 @@ describe("a reply posted once", () => {
     );
     expect(told).toHaveLength(1);
     // Finished: the dead letter coming twice says nothing more.
-    expect(await abandonSlackReply(deps, bot, slack, q.job)).toBe(false);
+    expect(await abandonSlackReply(deps, slack, q.job)).toBe(false);
   });
 });
 
@@ -943,7 +976,7 @@ describe("what the answer remembered", () => {
       rememberFact(tx, who, { fact: "Plans means the paid plans", why: "correction", about: "plans", runId: q.runId }),
     );
     const calls = from();
-    const delivered = deliverSlackReply(deps, bot, slack, q.job);
+    const delivered = deliverSlackReply(deps, slack, q.job);
     await q.end(answer("There are 2 paid plans."));
     expect(await delivered).toBe("done");
     const [stop] = calls().filter((c) => c.method === "chat.stopStream");
@@ -959,7 +992,7 @@ describe("a reply in a channel's thread", () => {
     await s.t.owner`insert into app.slack_conversation (org_id, team_id, slack_thread_id, slack_user_id, thread_id)
       values (${s.orgId}, ${TEAM.teamId}, ${`slack:C0REV:${q.ts}`}, 'UOTHER', ${q.threadId})`;
     const calls = from();
-    const delivered = deliverSlackReply(deps, bot, slack, q.job);
+    const delivered = deliverSlackReply(deps, slack, q.job);
     await q.end(answer("There are 2 plans."));
     expect(await delivered).toBe("done");
     const [stop] = calls().filter((c) => c.method === "chat.stopStream");

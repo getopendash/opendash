@@ -31,6 +31,7 @@ import {
   type SecretStore,
   SLACK_FOR_GOOD,
   SLACK_REPLY_FAILURES,
+  type SlackFilesJob,
   SlackReplyFenced,
   type SlackReplyJob,
   slackBotToken,
@@ -46,11 +47,13 @@ import { answerBlocks, chartPng, packageFontDir, pdfFileName, renderPdf } from "
 import type { Chat } from "chat";
 import { askBlocks, buttonText, spelledOut } from "./ask";
 import { optionAction } from "./bot";
-import { type AnswerCard, answerCard } from "./card";
+import { type AnswerCard, answerCard, chartMessages } from "./card";
 import { cardsAfter, failureCode, READING, type StreamClient, slackError, slackRefusal, taskCards } from "./progress";
 import {
   cardCsv,
   chartAltText,
+  citedQueries,
+  downloadsOf,
   type Event,
   fileStem,
   pdfAnswer,
@@ -266,7 +269,6 @@ const gaveUpText = (url: string) => `I couldn't finish replying here. The answer
 /** Delivers a run's reply. "skipped": nothing to send (not from Slack, finished already, or another attempt has it). */
 export async function deliverSlackReply(
   deps: DeliverDeps,
-  bot: Chat,
   slack: SlackAdapter,
   job: SlackReplyJob,
   signal?: AbortSignal,
@@ -290,7 +292,7 @@ export async function deliverSlackReply(
     await finish("failed").catch(() => {});
     return "skipped";
   }
-  const reply = new Reply(deps, bot, slack, job, { ...target, userId: target.userId }, attempt, workspace.botUserId);
+  const reply = new Reply(deps, slack, job, { ...target, userId: target.userId }, attempt, workspace.botUserId);
   // Scoped to the workspace, so the adapter's cached profiles of one workspace never answer for another's.
   const scoped = (fn: () => Promise<void>) => slack.withBotToken(token, fn, { installationId: target.teamId });
   try {
@@ -320,16 +322,82 @@ export async function deliverSlackReply(
   }
 }
 
+/** The queries an answer cites, as its asker sees them in OpenDash (query cards): those that ran. */
+async function citedCards(
+  deps: Pick<DeliverDeps, "withTenant">,
+  viewer: { orgId: string; userId: string },
+  ids: string[],
+): Promise<QueryCard[]> {
+  const cards = await Promise.all(
+    ids.slice(0, 20).map((id) => getQueryCard({ withTenant: deps.withTenant }, viewer, id)),
+  );
+  return cards.filter((c): c is QueryCard => c !== null && c.status === "succeeded");
+}
+
+/**
+ * A file asked for from an answer's Download menu, posted in its thread: the answer as a PDF (as the web app draws it,
+ * each number listed at the end with its query cell), or the rows of a query it cites as CSV (as its card shows them).
+ * Read as the asker; only a query the answer cites. "skipped": nothing to send (the asker left, Slack took the app
+ * back, or there's no such file).
+ */
+export async function deliverSlackFile(
+  deps: DeliverDeps,
+  bot: Chat,
+  slack: SlackAdapter,
+  job: SlackFilesJob,
+): Promise<"done" | "skipped"> {
+  const target = await deps.withTenant(job.orgId, (tx) => slackReplyOf(tx, job.orgId, job.runId));
+  if (!target?.userId || !target.linked) return "skipped";
+  const workspace = await slackBotToken(deps, target.teamId);
+  if (!workspace?.token) return "skipped";
+  const viewer = { orgId: job.orgId, userId: target.userId };
+  const run = await getRun({ withTenant: deps.withTenant }, viewer, job.runId);
+  const outcome = run?.outcome;
+  if (outcome?.kind !== "answer") return "skipped";
+  const cited = await citedCards(deps, viewer, citedQueries(outcome));
+  let file: { filename: string; data: Buffer; mimeType: string } | null = null;
+  let said = "";
+  if (job.file === "pdf") {
+    const answer = pdfAnswer(outcome);
+    const about = answer ? await deps.withTenant(job.orgId, (tx) => answerAbout(tx, job.orgId, job.runId)) : null;
+    if (!answer || !about) return "skipped";
+    const blocks = answerBlocks(answer, {
+      ...about,
+      note: `Asked in Slack, answered from ${about.sourceName}. Each number is listed at the end with the query cell it was read from.`,
+      names: new Map(cited.map((c) => [c.id, { alias: c.alias, title: c.title }])),
+    });
+    const pdf = await renderPdf(blocks, about.question, undefined, {
+      onChartError: (error) =>
+        deps.log?.("slack file: a chart drawn as a table", { runId: job.runId, why: String(error) }),
+    });
+    file = { filename: pdfFileName(about.question), data: Buffer.from(pdf), mimeType: "application/pdf" };
+    said = "The answer as a PDF.";
+  } else {
+    const card = cited.find((c) => `csv:${c.id}` === job.file && c.preview.length > 0);
+    if (!card) return "skipped";
+    const csv = cardCsv(card);
+    file = { filename: csv.filename, data: csv.data, mimeType: "text/csv" };
+    said =
+      card.rows !== null && card.rows > card.preview.length
+        ? `The rows of “${card.title}” as CSV, the first ${card.preview.length} of ${card.rows}.`
+        : `The rows of “${card.title}” as CSV.`;
+  }
+  const sent = file;
+  await slack.withBotToken(
+    workspace.token,
+    async () => {
+      await bot.thread(target.slackThreadId).post({ markdown: quiet(said), files: [sent] });
+    },
+    { installationId: target.teamId },
+  );
+  return "done";
+}
+
 /**
  * The last word on a reply the queue gave up on (its dead letter): the person told where the answer is, if the reply
  * is still unfinished.
  */
-export async function abandonSlackReply(
-  deps: DeliverDeps,
-  bot: Chat,
-  slack: SlackAdapter,
-  job: SlackReplyJob,
-): Promise<boolean> {
+export async function abandonSlackReply(deps: DeliverDeps, slack: SlackAdapter, job: SlackReplyJob): Promise<boolean> {
   const target = await deps.withTenant(job.orgId, (tx) => slackReplyOf(tx, job.orgId, job.runId));
   if (target?.status !== "streaming" || !target.userId) return false;
   const attempt = await deps.withTenant(job.orgId, (tx) => beginSlackReplyAttempt(tx, job.orgId, job.runId));
@@ -340,15 +408,7 @@ export async function abandonSlackReply(
   }
   const workspace = await slackBotToken(deps, target.teamId);
   const token = workspace?.token;
-  const reply = new Reply(
-    deps,
-    bot,
-    slack,
-    job,
-    { ...target, userId: target.userId },
-    attempt,
-    workspace?.botUserId ?? "",
-  );
+  const reply = new Reply(deps, slack, job, { ...target, userId: target.userId }, attempt, workspace?.botUserId ?? "");
   if (!token) {
     await deps.withTenant(job.orgId, (tx) => finishSlackReplyAttempt(tx, job.orgId, job.runId, attempt, "failed"));
     return true;
@@ -370,7 +430,6 @@ class Reply {
 
   constructor(
     private readonly deps: DeliverDeps,
-    private readonly bot: Chat,
     private readonly slack: SlackAdapter,
     private readonly job: SlackReplyJob,
     private readonly target: {
@@ -640,8 +699,11 @@ class Reply {
       throw error;
     }
     const ask = run?.thread_id ? `${this.url}/ask/${encodeURIComponent(run.thread_id)}` : this.url;
-    const said = replyText(run?.outcome ?? null, run?.status ?? "failed", ask);
     const asker = this.target.userId;
+    // What its Download menu offers, read as the asker sees them: the answer as a PDF, each cited query's rows.
+    const base = replyText(run?.outcome ?? null, run?.status ?? "failed", ask);
+    const cards = base.cited.length ? await citedCards(deps, { orgId: job.orgId, userId: asker }, base.cited) : [];
+    const said = { ...base, downloads: downloadsOf(job.runId, run?.outcome, cards, deps.maxFiles) };
     this.remembered = deps.withUser
       ? await deps
           .withUser(job.orgId, asker, (tx) => memoriesOfRun(tx, { orgId: job.orgId, userId: asker }, job.runId))
@@ -701,16 +763,45 @@ class Reply {
       const part = `answer:${i + 2}`;
       await this.once(part, () => this.posted(part, markdown, said, part === lastPart));
     }
-    // Its charts, as images in the thread, each the page's own drawing with its values as alt text: those its card drew
-    // aren't sent again, when the answer went as a card (marked so) and Slack didn't refuse it. An answer with no mark
-    // (an attempt from before cards, say) has every chart as an image.
+    // Its other charts: Slack's own, two a message, where Slack can draw them; the rest as images, each the page's
+    // own drawing with its values as alt text. Those its card drew aren't sent again, when the answer went as a card
+    // (marked so); once Slack refused the card's blocks, every chart is an image. An answer with no mark (an attempt
+    // from before cards, say) has every chart as an image.
     const outcome = run?.outcome;
     if (outcome?.kind === "answer" && outcome.status === "answered" && outcome.charts?.length) {
-      const asCard = card !== null && !this.cardRefused && (await begun(CARD_SENT)) && !(await begun(CARD_REFUSED));
-      const drawn = new Set(asCard ? card.charts : []);
-      const images = outcome.charts.filter((_, i) => !drawn.has(i));
-      if (images.length)
-        await this.charts(images).catch((error: unknown) => {
+      const charts = outcome.charts;
+      const refused = this.cardRefused || (await begun(CARD_REFUSED));
+      const drawn = card !== null && !refused && (await begun(CARD_SENT)) ? card.charts : [];
+      let plan: { messages: { blocks: Record<string, unknown>[]; charts: number[] }[]; images: number[] } = {
+        messages: [],
+        images: charts.map((_, i) => i).filter((i) => !drawn.includes(i)),
+      };
+      if (!refused) {
+        try {
+          plan = chartMessages(outcome, drawn);
+        } catch (error) {
+          deps.log?.("slack reply: charts as images", { runId: job.runId, why: failureCode(error) });
+        }
+      }
+      const images = [...plan.images];
+      for (const [k, m] of plan.messages.entries()) {
+        const part = `charts:${k + 1}`;
+        const went = await this.once(
+          part,
+          () => this.post(part, { text: "The answer's charts", blocks: m.blocks }),
+          false,
+        )
+          .then(() => true)
+          .catch((error: unknown) => {
+            if (error instanceof SlackReplyFenced) throw error;
+            deps.log?.("slack reply: charts as images", { runId: job.runId, why: failureCode(error) });
+            return false;
+          });
+        if (!went) images.push(...m.charts);
+      }
+      const pictures = images.sort((a, b) => a - b).flatMap((i) => (charts[i] ? [charts[i]] : []));
+      if (pictures.length)
+        await this.charts(pictures).catch((error: unknown) => {
           if (error instanceof SlackReplyFenced) throw error;
           deps.log?.("slack reply: its charts weren't posted", { runId: job.runId, why: failureCode(error) });
         });
@@ -758,9 +849,7 @@ class Reply {
       await slack.removeReaction(this.threadId, ts, "eyes").catch(() => {});
       if (said.answered) await slack.addReaction(this.threadId, ts, "check").catch(() => {});
     }
-    await this.files(said.cited, run?.outcome).catch((error: unknown) => {
-      if (error instanceof SlackReplyFenced) throw error;
-    });
+    // Its files (the PDF, the rows as CSV) only when asked for, from its Download menu (`deliverSlackFile`).
     await this.deps.withTenant(job.orgId, (tx) =>
       finishSlackReplyAttempt(tx, job.orgId, job.runId, this.attempt, "done"),
     );
@@ -795,67 +884,6 @@ class Reply {
           })),
         });
         return null;
-      },
-      false,
-    );
-  }
-
-  /**
-   * The queries behind the answer, as the asker sees them in OpenDash (query cards): their rows as CSV, their names in
-   * the PDF's appendix; and the answer as a PDF, when it has numbers. One message, at most once.
-   */
-  private async files(citedIds: string[], outcome: Parameters<typeof pdfAnswer>[0]): Promise<void> {
-    const { deps, job } = this;
-    const viewer = { orgId: job.orgId, userId: this.target.userId };
-    const cited = (
-      await Promise.all(citedIds.slice(0, 20).map((id) => getQueryCard({ withTenant: deps.withTenant }, viewer, id)))
-    ).filter((c): c is QueryCard => c !== null && c.status === "succeeded");
-    const cards = cited.filter((c) => c.preview.length > 0).slice(0, deps.maxFiles ?? 3);
-    const answer = pdfAnswer(outcome);
-    if (!answer && !cards.length) return;
-    await this.once(
-      "files",
-      async () => {
-        const pdf = answer
-          ? await (async () => {
-              const about = await deps.withTenant(job.orgId, (tx) => answerAbout(tx, job.orgId, job.runId));
-              if (!about) return null;
-              const blocks = answerBlocks(answer, {
-                ...about,
-                note: `Asked in Slack, answered from ${about.sourceName}. Each number is listed at the end with the query cell it was read from.`,
-                names: new Map(cited.map((c) => [c.id, { alias: c.alias, title: c.title }])),
-              });
-              return {
-                filename: pdfFileName(about.question),
-                data: Buffer.from(
-                  await renderPdf(blocks, about.question, undefined, {
-                    onChartError: (error) =>
-                      deps.log?.("slack reply: a chart drawn as a table", { runId: job.runId, why: String(error) }),
-                  }),
-                ),
-              };
-            })().catch(() => null)
-          : null;
-        if (!pdf && !cards.length) return null;
-        // Left the workspace while the files were made: they aren't sent (the answer went while they were a member).
-        const still = await deps.withTenant(job.orgId, (tx) => slackReplyOf(tx, job.orgId, job.runId));
-        if (!still?.linked) return null;
-        const rows = cards.length === 1 ? "the rows behind it as CSV" : "the rows behind it as CSV, a file a query";
-        const sent = await this.bot.thread(this.threadId).post({
-          markdown: pdf
-            ? cards.length
-              ? `The answer as a PDF, and ${rows}.`
-              : "The answer as a PDF."
-            : `${rows[0]?.toUpperCase()}${rows.slice(1)}.`,
-          files: [
-            ...(pdf ? [{ filename: pdf.filename, data: pdf.data, mimeType: "application/pdf" }] : []),
-            ...cards.map((c) => {
-              const csv = cardCsv(c);
-              return { filename: csv.filename, data: csv.data, mimeType: "text/csv" };
-            }),
-          ],
-        });
-        return (sent as { id?: string } | undefined)?.id ?? null;
       },
       false,
     );

@@ -12,7 +12,7 @@ import {
   type RunOutcome,
 } from "@opendash/core";
 import { queryCsv } from "@opendash/core/csv";
-import { visibleLinks } from "@opendash/markdown";
+import { type Block as MdBlock, parseMarkdown, plainText, visibleLinks } from "@opendash/markdown";
 import { spelledOut } from "./ask";
 import { LEARNING_SUGGEST } from "./learning";
 
@@ -171,6 +171,16 @@ export interface ReplyText {
   cited: string[];
   /** Whether it's an answer to the question (an answer, a question back, or why it can't), not a failure or a stop. */
   answered: boolean;
+  /** Quiet lines under the answer's words: how it read the question, and each caveat (Markdown, as written). */
+  context: { reading: string | null; caveats: string[] };
+  /** What the Download menu offers: the answer as a PDF, each cited query's rows as CSV (filled in by the reply). */
+  downloads: Download[];
+}
+
+/** A file the Download menu offers: its words, and what a press asks for (the run and the file, nothing said). */
+export interface Download {
+  label: string;
+  value: string;
 }
 
 const link = (label: string, url: string) => `[${label}](${url})`;
@@ -194,7 +204,7 @@ function messages(body: string, url: string): string[] {
 type Answer = Extract<RunOutcome, { kind: "answer" }>;
 
 /** The queries an answer cites, each once. */
-const citedQueries = (outcome: Answer) => [
+export const citedQueries = (outcome: Answer) => [
   ...new Set(
     ((outcome.citations ?? []) as { queryRunId?: unknown }[]).flatMap((c) =>
       typeof c?.queryRunId === "string" ? [c.queryRunId] : [],
@@ -215,11 +225,25 @@ export function pdfAnswer(outcome: RunOutcome | null | undefined): Answer | null
   return outcome?.kind === "answer" && outcome.status === "answered" && hasNumbers(outcome) ? outcome : null;
 }
 
-/** What follows an answer's text in Slack, as Markdown: how it read the question, then its caveats. */
-export const answerTail = (outcome: Pick<Answer, "interpretation" | "caveats">): string[] => [
-  ...(outcome.interpretation.length ? [`_${outcome.interpretation.join(" · ")}_`] : []),
-  ...outcome.caveats.map((c) => `> ${c}`),
-];
+/**
+ * What an answer's Download menu offers: the answer as a PDF (one with numbers), then each cited query that has rows,
+ * as CSV, at most `max` of them. A choice carries the run and the file, never what it says.
+ */
+export function downloadsOf(
+  runId: string,
+  outcome: RunOutcome | null | undefined,
+  cards: Pick<QueryCard, "id" | "title" | "preview">[],
+  max = 4,
+): Download[] {
+  const pdf = pdfAnswer(outcome)
+    ? [{ label: "PDF of this answer", value: JSON.stringify({ r: runId, f: "pdf" }) }]
+    : [];
+  const csv = cards
+    .filter((c) => c.preview.length > 0)
+    .slice(0, max)
+    .map((c) => ({ label: `CSV: ${c.title}`, value: JSON.stringify({ r: runId, q: c.id }) }));
+  return [...pdf, ...csv];
+}
 
 /** A reply that's only words, with the way into OpenDash. */
 const plain = (body: string, url: string, label = "Open in OpenDash", answered = true): ReplyText => ({
@@ -230,6 +254,8 @@ const plain = (body: string, url: string, label = "Open in OpenDash", answered =
   rate: false,
   cited: [],
   answered,
+  context: { reading: null, caveats: [] },
+  downloads: [],
 });
 
 /**
@@ -298,32 +324,66 @@ export function replyText(outcome: RunOutcome | null, status: string, url: strin
   // No numbers in it (a greeting, an explanation) and it passed its checks: just what it says, with the way into
   // OpenDash. One that didn't pass keeps its "Unverified" line below, whatever it cites.
   if (!hasNumbers(outcome) && outcome.verified && !outcome.problems.length) {
-    const said = [outcome.rendered.trim(), ...outcome.caveats.map((c) => `> ${c}`)].join("\n\n");
-    return { ...plain(said, url), next, rate: true };
+    return {
+      ...plain(outcome.rendered.trim(), url),
+      next,
+      rate: true,
+      context: { reading: null, caveats: outcome.caveats },
+    };
   }
-  const lines = [outcome.rendered.trim(), ...answerTail(outcome)];
   const facts = [
     outcome.verified
       ? outcome.path === "metric"
-        ? "Verified from definitions an admin approved"
-        : "Every number checked against its query"
-      : `Unverified: ${(outcome.problems.join(" ") || "the answer didn't pass every check.").replace(/\.$/, "")}`,
+        ? "✅ Verified from definitions an admin approved"
+        : "✅ Every number checked against its query"
+      : `⚠️ Unverified: ${(outcome.problems.join(" ") || "the answer didn't pass every check.").replace(/\.$/, "")}`,
   ];
   return {
-    messages: messages(lines.join("\n\n"), url),
+    messages: messages(outcome.rendered.trim(), url),
     footer: facts.join(" · "),
     open: { label: outcome.verified ? "See where each number comes from" : "Open in OpenDash", url },
     next,
     rate: true,
     cited: citedQueries(outcome),
     answered: true,
+    context: { reading: outcome.interpretation.join(" · ") || null, caveats: outcome.caveats },
+    downloads: [],
   };
+}
+
+/**
+ * Markdown as one plain line, for Slack's quiet context lines: marks dropped, every link's address in sight, a list or
+ * a quote's text kept (plain text, so nothing in it is markup).
+ */
+export function plainLine(markdown: string): string {
+  const flat = (blocks: MdBlock[]): string[] =>
+    blocks.flatMap((b) =>
+      b.kind === "paragraph" || b.kind === "heading"
+        ? [plainText(b.content)]
+        : b.kind === "list"
+          ? b.items.flatMap(flat)
+          : b.kind === "quote"
+            ? flat(b.children)
+            : b.kind === "code"
+              ? [b.text]
+              : b.kind === "table"
+                ? [[b.head, ...b.rows].map((r) => r.map(plainText).join(" | ")).join("; ")]
+                : [],
+    );
+  return quiet(
+    flat(parseMarkdown(visibleLinks(markdown)))
+      .join(" ")
+      .replace(/\s+/g, " ")
+      .trim(),
+  );
 }
 
 /** The buttons' actions under an answer: the way into OpenDash, a follow-up, 👍/👎. */
 export const OPEN_ACTION = "opendash:open";
 export const nextAction = (i: number) => `opendash:next:${i}`;
 export const NEXT_ACTIONS = [0, 1, 2].map(nextAction);
+/** The Download menu under an answer: a press asks for one of its files. */
+export const DOWNLOAD_ACTION = "opendash:download";
 /** Slack's own feedback buttons, and the plain ones where Slack refuses them. */
 export const FEEDBACK_ACTION = "opendash:feedback";
 export const RATE_ACTIONS = ["opendash:rate:up", "opendash:rate:down"] as const;
@@ -352,6 +412,17 @@ export function replyBlocks(
   inDm = true,
 ): Record<string, unknown>[] {
   const blocks: Record<string, unknown>[] = [];
+  // How it read the question, then each caveat: quiet lines under the words, as plain text.
+  const quietLine = (text: string) => ({
+    type: "context",
+    elements: [{ type: "plain_text", text: text.slice(0, 2_000), emoji: true }],
+  });
+  const reading = said.context.reading ? plainLine(said.context.reading) : "";
+  if (reading) blocks.push(quietLine(reading));
+  for (const caveat of said.context.caveats) {
+    const line = plainLine(caveat);
+    if (line) blocks.push(quietLine(`ℹ️ ${line}`));
+  }
   const shareable = remembered.slice(0, 2).filter((m) => m.why === "correction");
   for (const m of remembered.slice(0, 2)) {
     blocks.push({
@@ -382,9 +453,10 @@ export function replyBlocks(
     });
   }
   if (said.footer) {
+    blocks.push({ type: "divider" });
     blocks.push({
       type: "context",
-      elements: [{ type: "plain_text", text: said.footer.slice(0, 2_000), emoji: false }],
+      elements: [{ type: "plain_text", text: said.footer.slice(0, 2_000), emoji: true }],
     });
   }
   // A follow-up longer than its button asks all of it: said in full above the buttons.
@@ -400,6 +472,17 @@ export function replyBlocks(
         text: words(q),
         value: JSON.stringify({ r: runId, i }),
       })),
+      // The answer's files, only when asked for: the PDF, each cited query's rows as CSV.
+      ...(said.downloads.length
+        ? [
+            {
+              type: "static_select",
+              action_id: DOWNLOAD_ACTION,
+              placeholder: words("Download"),
+              options: said.downloads.slice(0, 5).map((d) => ({ text: words(d.label), value: d.value })),
+            },
+          ]
+        : []),
     ],
   });
   if (said.rate && feedback === "native") {
