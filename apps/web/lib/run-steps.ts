@@ -538,8 +538,16 @@ export function runSteps(all: RunEventLike[], context: { source: string }): RunS
         } else if (tool === "mcp_find") {
           const found = n(e.data.found) ?? 0;
           const query = s(e.data.query);
-          step.status = found ? "ok" : "warn";
-          step.detail = [query ? `"${query}"` : null, found ? plural(found, "tool") : "none found"]
+          // How many services it listed (a find with no query lists every one, with tools or none yet). Steps from
+          // before it was kept say only how many tools.
+          const servers = n(e.data.servers);
+          const listed = !query && servers !== undefined && servers > 0;
+          step.status = found || listed ? "ok" : "warn";
+          step.detail = [
+            query ? `"${query}"` : null,
+            listed ? plural(servers, "service") : null,
+            found ? plural(found, "tool") : listed ? null : "none found",
+          ]
             .filter(Boolean)
             .join(" · ");
         } else if (tool === "mcp_call") {

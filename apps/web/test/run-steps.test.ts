@@ -175,6 +175,35 @@ describe("run steps", () => {
     ]);
   });
 
+  it("says how many services and tools a look for connected services found", () => {
+    seq = 0;
+    const find = (id: string, input: Record<string, unknown>, result: Record<string, unknown>) => [
+      ev("tool_started", { callId: id, tool: "mcp_find", input }),
+      ev("tool_result", { callId: id, tool: "mcp_find", status: "succeeded", ...result }),
+    ];
+    const steps = runSteps(
+      [
+        ...find("a", {}, { query: null, servers: 3, found: 156 }),
+        // Services turned on that nobody has signed in to have no tools yet: they were still found.
+        ...find("b", {}, { query: null, servers: 2, found: 0 }),
+        ...find("c", { query: "llm cost" }, { query: "llm cost", servers: 3, found: 4 }),
+        ...find("d", { query: "zebra" }, { query: "zebra", servers: 3, found: 0 }),
+        ...find("e", {}, { query: null, servers: 0, found: 0 }),
+        // A step from before the count of services was kept.
+        ...find("f", { query: "issues" }, { query: "issues", found: 2 }),
+      ],
+      { source: "s" },
+    );
+    expect(steps.map((x) => [x.status, x.detail])).toEqual([
+      ["ok", "3 services · 156 tools"],
+      ["ok", "2 services"],
+      ["ok", '"llm cost" · 4 tools'],
+      ["warn", '"zebra" · none found'],
+      ["warn", "none found"],
+      ["ok", '"issues" · 2 tools'],
+    ]);
+  });
+
   it("says what was checked from the answer once the run's events are gone", () => {
     const at = (s: number) => new Date(t0 + s * 1000).toISOString();
     const done = { status: "succeeded", queuedAt: at(0), startedAt: at(0), finishedAt: at(19) };
