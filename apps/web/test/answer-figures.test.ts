@@ -42,6 +42,16 @@ describe("an answer's headline figures on the page", () => {
     expect(html).toContain("traced-number");
   });
 
+  it("colours a change green for good news and red for bad, down being good where lower is better", () => {
+    const rose = { segments: [ref("+6.1%")], direction: "up" as const };
+    expect(draw([{ label: "Orders", value: [ref("40")], change: rose }])).toContain("answer-figures__change--good");
+    expect(draw([{ label: "Churn", value: [ref("4")], change: rose, lowerIsBetter: true }])).toContain(
+      "answer-figures__change--bad",
+    );
+    const flat = { segments: [ref("0%")], direction: "flat" as const };
+    expect(draw([{ label: "Orders", value: [ref("40")], change: flat }])).toContain("answer-figures__change--flat");
+  });
+
   it("puts figures that go together under their heading, in the order given", () => {
     const html = draw([
       { label: "Acquisition", value: [ref("15,580")] },
