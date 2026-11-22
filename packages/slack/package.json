@@ -13,20 +13,20 @@
     "test": "vitest run"
   },
   "dependencies": {
-    "@chat-adapter/slack": "4.44.0",
-    "@chat-adapter/state-pg": "4.44.0",
-    "@json-render/chat": "0.23.1",
-    "@json-render/core": "0.23.1",
+    "@chat-adapter/slack": "4.45.0",
+    "@chat-adapter/state-pg": "4.45.0",
+    "@json-render/chat": "0.23.2",
+    "@json-render/core": "0.23.2",
     "@slack/socket-mode": "2.0.7",
     "@opendash/core": "workspace:*",
     "@opendash/db": "workspace:*",
     "@opendash/markdown": "workspace:*",
     "@opendash/pdf": "workspace:*",
-    "chat": "4.44.0",
+    "chat": "4.45.0",
     "pg-boss": "12.38.2"
   },
   "devDependencies": {
-    "@chat-adapter/state-memory": "4.44.0",
-    "vitest": "5.1.0"
+    "@chat-adapter/state-memory": "4.45.0",
+    "vitest": "5.1.1"
   }
 }

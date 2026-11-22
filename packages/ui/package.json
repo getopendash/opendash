@@ -20,7 +20,7 @@
     "@tanstack/react-table": "9.3.1",
     "@opendash/charts": "workspace:*",
     "@opendash/tokens": "workspace:*",
-    "lucide-react": "1.72.0"
+    "lucide-react": "1.76.0"
   },
   "peerDependencies": {
     "react": "^19.2.0",
@@ -33,6 +33,6 @@
     "react": "19.3.1",
     "react-dom": "19.3.1",
     "tsx": "4.23.15",
-    "vitest": "5.1.0"
+    "vitest": "5.1.1"
   }
 }

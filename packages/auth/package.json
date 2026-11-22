@@ -18,20 +18,20 @@
     "two-factor-off": "tsx scripts/two-factor-off.ts"
   },
   "dependencies": {
-    "@better-auth/api-key": "1.7.22",
-    "@better-auth/core": "1.7.22",
-    "@better-auth/drizzle-adapter": "1.7.22",
+    "@better-auth/api-key": "1.7.26",
+    "@better-auth/core": "1.7.26",
+    "@better-auth/drizzle-adapter": "1.7.26",
     "@opendash/core": "workspace:*",
     "@opendash/db": "workspace:*",
     "@opendash/email": "workspace:*",
-    "better-auth": "1.7.22",
+    "better-auth": "1.7.26",
     "drizzle-orm": "0.45.4"
   },
   "devDependencies": {
     "@types/react": "19.3.0",
-    "auth": "1.7.22",
+    "auth": "1.7.26",
     "tsx": "4.23.15",
-    "vitest": "5.1.0"
+    "vitest": "5.1.1"
   },
   "peerDependencies": {
     "next": "^16.0.0",

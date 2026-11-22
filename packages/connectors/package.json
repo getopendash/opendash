@@ -15,7 +15,7 @@
   },
   "dependencies": {
     "@clickhouse/client": "1.25.0",
-    "libpg-query": "18.2.2",
+    "libpg-query": "18.2.4",
     "mysql2": "3.24.6",
     "node-sql-parser": "5.4.0",
     "postgres": "3.4.9"
@@ -23,6 +23,6 @@
   "devDependencies": {
     "@opendash/db": "workspace:*",
     "@opendash/evals": "workspace:*",
-    "vitest": "5.1.0"
+    "vitest": "5.1.1"
   }
 }
