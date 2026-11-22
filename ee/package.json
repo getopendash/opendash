@@ -21,18 +21,18 @@
     "keycloak:check": "sh scripts/keycloak-check.sh"
   },
   "dependencies": {
-    "@better-auth/core": "1.7.22",
-    "@better-auth/scim": "1.7.22",
-    "@better-auth/sso": "1.7.22",
+    "@better-auth/core": "1.7.26",
+    "@better-auth/scim": "1.7.26",
+    "@better-auth/sso": "1.7.26",
     "@opendash/auth": "workspace:*",
     "@opendash/connectors": "workspace:*",
     "@opendash/core": "workspace:*",
     "@opendash/db": "workspace:*",
-    "better-auth": "1.7.22",
+    "better-auth": "1.7.26",
     "drizzle-orm": "0.45.4"
   },
   "devDependencies": {
     "tsx": "4.23.15",
-    "vitest": "5.1.0"
+    "vitest": "5.1.1"
   }
 }
