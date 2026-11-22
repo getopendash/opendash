@@ -4,7 +4,7 @@
 import type { ResolvedFigure, RunOutcome } from "@opendash/core";
 import { describe, expect, it } from "vitest";
 import { answerCard } from "../src/card";
-import { changeLine, figureCards, figureFields, figureLines } from "../src/figures";
+import { changeLine, figureCards, figureFields, figureLines, sparkline, tone } from "../src/figures";
 import { fileSources, noticeText } from "../src/reply";
 
 const ref = (display: string, kind: "number" | "text" = "number") => ({
@@ -36,18 +36,39 @@ const channel = (label: string, value: string, group = "Paid channels"): Resolve
 });
 
 describe("headline figures as Slack's cards", () => {
-  it("are a card each, in a carousel a group under its heading, in the order given", () => {
-    const blocks = figureCards([acquisition, channel("Google Ads", "$55"), channel("Meta", "$70")]);
-    expect(blocks.map((b) => b.type)).toEqual(["carousel", "section", "carousel"]);
+  it("are a card each, two a row, a group under its heading: its number on top, its label, a dot for good or bad news", () => {
+    const blocks = figureCards([
+      acquisition,
+      channel("Google Ads", "$55"),
+      channel("Meta", "$70"),
+      channel("Search", "$12"),
+    ]);
+    expect(blocks.map((b) => b.type)).toEqual(["carousel", "section", "carousel", "carousel"]);
     expect(blocks[1]).toEqual({ type: "section", text: { type: "mrkdwn", text: "*Paid channels*" } });
-    const [first] = (blocks[0] as { elements: Record<string, { text: string }>[] }).elements;
-    expect(first).toEqual({
+    const cards = blocks.map((b) => (b.elements ?? []) as Record<string, { text: string }>[]);
+    expect(cards.map((row) => row.length)).toEqual([1, 0, 2, 1]);
+    expect(cards[0]?.[0]).toEqual({
       type: "card",
-      title: { type: "mrkdwn", text: "*Acquisition: 15,580*" },
-      subtitle: { type: "mrkdwn", text: "▼ 5% vs last week" },
-      body: { type: "mrkdwn", text: "6,727 activated\nLast weeks: 6.0k · 6.2k · 6.7k" },
+      title: { type: "mrkdwn", text: "*15,580*" },
+      subtitle: { type: "mrkdwn", text: "Acquisition" },
+      body: { type: "mrkdwn", text: "🔴 ▼ 5% vs last week\n6,727 activated\nLast weeks ▁▃█" },
     });
-    expect((blocks[2] as { elements: unknown[] }).elements).toHaveLength(2);
+    expect(cards[2]?.[0]?.body?.text).toBe("🟢 ▲ 13% vs last week");
+  });
+
+  it("are good news or bad by what the measure is: down is good where lower is better", () => {
+    expect(tone(acquisition)).toBe("bad");
+    expect(tone({ ...acquisition, lowerIsBetter: true })).toBe("good");
+    expect(tone(channel("Meta", "$70"))).toBe("good");
+    expect(tone({ ...channel("Churn", "$70"), lowerIsBetter: true })).toBe("bad");
+    expect(tone({ ...acquisition, change: { segments: [ref("0%")], direction: "flat" } })).toBeNull();
+    expect(tone({ label: "MRR", value: [ref("$1")] })).toBeNull();
+  });
+
+  it("draw a trend as a sparkline, lowest to highest, a flat one level", () => {
+    expect(sparkline([1, 2, 3, 4, 5, 6, 7, 8])).toBe("▁▂▃▄▅▆▇█");
+    expect(sparkline([-5, 0, 5])).toBe("▁▅█");
+    expect(sparkline([3, 3, 3])).toBe("▄▄▄");
   });
 
   it("say a change's direction with its arrow, and its size without a sign", () => {
@@ -60,21 +81,21 @@ describe("headline figures as Slack's cards", () => {
 
   it("make nothing in a label or a line markup, and notify nobody", () => {
     const loud: ResolvedFigure = { ...acquisition, label: "<!channel> <https://x.example|Go> & co", detail: [] };
-    const card = (figureCards([loud])[0] as { elements: { title: { text: string } }[] }).elements[0];
-    expect(card?.title.text).not.toContain("<!channel>");
-    expect(card?.title.text).not.toContain("<https");
-    expect(card?.title.text).toContain("&amp;");
+    const card = (figureCards([loud])[0] as { elements: { subtitle: { text: string } }[] }).elements[0];
+    expect(card?.subtitle.text).not.toContain("<!channel>");
+    expect(card?.subtitle.text).not.toContain("<https");
+    expect(card?.subtitle.text).toContain("&amp;");
   });
 
-  it("never cut a number: past a card's room the trend goes, then the line more; a long label is cut, not the value", () => {
-    const long = Array.from({ length: 30 }, (_, i) => point(`${i}.0k`, i, i));
-    const crowded = { ...acquisition, trend: { label: "Every week", points: long } };
-    const body = (figureCards([crowded])[0] as { elements: { body?: { text: string } }[] }).elements[0]?.body?.text;
-    expect(body).toBe("6,727 activated");
+  it("never cut a number: past a card's room the line more goes, then the trend; a long label is cut, not the value", () => {
+    const wordy = { ...acquisition, detail: [{ text: "x".repeat(190) }] };
+    const body = (figureCards([wordy])[0] as { elements: { body?: { text: string } }[] }).elements[0]?.body?.text;
+    expect(body).toBe("🔴 ▼ 5% vs last week\nLast weeks ▁▃█");
     const named = { ...acquisition, label: "x".repeat(200) };
-    const title = (figureCards([named])[0] as { elements: { title: { text: string } }[] }).elements[0]?.title.text;
-    expect(title?.endsWith(": 15,580*")).toBe(true);
-    expect(title?.length).toBeLessThanOrEqual(152);
+    const [card] = (figureCards([named])[0] as { elements: { title: { text: string }; subtitle: { text: string } }[] })
+      .elements;
+    expect(card?.title.text).toBe("*15,580*");
+    expect(card?.subtitle.text).toHaveLength(150);
   });
 
   it("are Slack's classic fields, as plain text, where cards aren't sent: a section a group, ten fields at most", () => {
@@ -83,12 +104,12 @@ describe("headline figures as Slack's cards", () => {
     expect(blocks).toEqual([
       {
         type: "section",
-        fields: [text("Acquisition\n15,580\n▼ 5% vs last week\n6,727 activated\nLast weeks: 6.0k · 6.2k · 6.7k")],
+        fields: [text("Acquisition\n15,580\n🔴 ▼ 5% vs last week\n6,727 activated\nLast weeks ▁▃█")],
       },
       {
         type: "section",
         text: text("Paid channels"),
-        fields: [text("Google Ads\n$55\n▲ 13% vs last week"), text("Meta\n$70\n▲ 13% vs last week")],
+        fields: [text("Google Ads\n$55\n🟢 ▲ 13% vs last week"), text("Meta\n$70\n🟢 ▲ 13% vs last week")],
       },
     ]);
     const many = Array.from({ length: 12 }, (_, i) => channel(`C${i}`, "$1", ""));

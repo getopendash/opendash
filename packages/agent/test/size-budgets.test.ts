@@ -133,12 +133,13 @@ const AGENTS: Record<string, { sections: (db: Db) => Sections; tools: AgentTool[
 // read names /results/<alias> (an earlier query's rows read back from the ledger, not rerun): about 70 more on
 // every agent that reads.
 // An answer's title and headline figures (cards above its text, in the page and in Slack), and charts for every trend
-// or breakdown rather than one: about 0.53k of the analyst's prompt and 0.66k of its answer tool, on every call.
+// or breakdown rather than one: about 0.53k of the analyst's prompt and 0.66k of its answer tool, on every call. A
+// figure's lower_is_better (how its change is coloured): about 60 more of the tool.
 const ANALYST_AGENT = { postgres: 7_750, clickhouse: 8_150, mysql: 8_100 };
 const BUDGET: Record<string, { agent: Record<Db, number>; tools: number }> = {
   analyst: { agent: ANALYST_AGENT, tools: 14_300 },
   "analyst with a definition to change": { agent: ANALYST_AGENT, tools: 15_550 },
-  "analyst with connected services": { agent: ANALYST_AGENT, tools: 16_100 },
+  "analyst with connected services": { agent: ANALYST_AGENT, tools: 16_150 },
   // A list's row actions and a plan's changes took the tools past 20,600; the rest of the kit (meters, next
   // actions, zones, team focus, a head's chips and verdict, kept inputs, a plan's reference) to 21,490.
   // dashboard_save's set and edits (a change by path, an exact edit of a part): 22,285. The

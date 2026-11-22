@@ -89,6 +89,8 @@ export interface FigureInput {
   trend?: boolean | { label?: string };
   /** What the trend covers, in words: Last weeks. */
   trend_label?: string;
+  /** Down is good (churn, cost): its change is coloured that way. */
+  lower_is_better?: boolean;
 }
 
 /** A headline figure, checked: each number a traced reference, its change's direction, its trend read from cells. */
@@ -100,6 +102,8 @@ export interface ResolvedFigure {
   detail?: AnswerSegment[];
   group?: string;
   trend?: { label?: string; points: ChartPoint[] };
+  /** Down is good: a fall is shown as good news, a rise as bad. */
+  lowerIsBetter?: boolean;
 }
 
 export interface AnswerInput {
@@ -200,12 +204,6 @@ export interface GateContext {
 const REF = /⟦([^⟦⟧]*)⟧/g;
 const REF_BODY = /⟦([^⟦⟧]*)⟧/;
 const ONE_REF = /^\s*⟦[^⟦⟧]*⟧\s*$/;
-/** The numbers a heading or a label may hold: a year, a quarter or half, a week, a month's day. */
-const DATE_WORDS =
-  /\b(?:19|20)\d{2}\b|\b[QH][1-4]\b|\b(?:week|wk)\s*\d{1,2}\b|\bW\d{1,2}\b|\b(?:jan|feb|mar|apr|may|jun|jul|aug|sep|sept|oct|nov|dec)[a-z]*\.?\s+\d{1,2}(?:st|nd|rd|th)?\b|\b\d{1,2}(?:st|nd|rd|th)?\s+(?:jan|feb|mar|apr|may|jun|jul|aug|sep|sept|oct|nov|dec)[a-z]*\b/gi;
-/** Numbers spelled out: in a heading or a label, a figure all the same. */
-const NUMBER_WORDS =
-  /\b(?:two|three|four|five|six|seven|eight|nine|ten|eleven|twelve|thirteen|fourteen|fifteen|sixteen|seventeen|eighteen|nineteen|twenty|thirty|forty|fifty|sixty|seventy|eighty|ninety|hundred|thousand|million|billion|dozen)\b/i;
 const CELL = /^\s*q(\d+)\s*:\s*(\d+)\s*:\s*([A-Za-z_][A-Za-z0-9_]*)\s*$/;
 const DERIVED = /^\s*(pct|delta|ratio|share|sum|avg)\s*\(([^()]*)\)\s*$/;
 const RELATIVE_TOLERANCE = 0.005;
@@ -797,8 +795,8 @@ export function checkAnswer(raw: AnswerInput, ctx: GateContext): GateResult {
 
   // Headline figures. A value is one reference to a measure (numeric columns only); a change is pct() or delta() of
   // that same cell against the same measure before (its column, or its row); a trend is the value's own column over
-  // time, in its query's time order, ending at the value. A figure's words are words (no figure, no reference, no
-  // marks), and every row its label, group or line more names is the row its numbers are from. Each figure is staged:
+  // time, in its query's time order, ending at the value. A figure's words are checked as the text is, and every
+  // row its label, group or line more names is the row its numbers are from. Each figure is staged:
   // one with a problem is sent back for repair and left out, and nothing it read counts for the answer (its checks, its
   // count, the cross-check it would need). One that's shown counts in full.
   const figures: ResolvedFigure[] = [];
@@ -807,13 +805,13 @@ export function checkAnswer(raw: AnswerInput, ctx: GateContext): GateResult {
   /** What's wrong with a figure or the title: repaired, never what decides whether the answer is verified. */
   const shownProblems: string[] = [];
   const echoable = ctx.definitions ? `${ctx.question}\n${ctx.definitions}` : ctx.question;
+  // A figure's words and the title are checked as the text is: a window ("last 30 days") or a ranking ("top 5") is
+  // words, a figure typed in them isn't.
   const wordsProblem = (name: string, words: unknown): string | null => {
     if (typeof words !== "string" || !words.trim()) return null;
     const quoted = `"${words.slice(0, 60)}"`;
-    if (/[⟦⟧*_~`]/.test(words)) return `${name}: ${quoted} is plain words, without references or formatting marks.`;
-    // Stricter than the text's rule: a heading's or a label's only numbers are dates (a year, a quarter, a week).
-    const undated = words.replace(DATE_WORDS, " ");
-    if (/\p{N}/u.test(undated) || NUMBER_WORDS.test(undated) || statesFigure(words, echoable)) {
+    if (/[⟦⟧]/.test(words)) return `${name}: ${quoted} is words, without references.`;
+    if (typedNumerals(words, echoable).length || statesFigure(words, echoable)) {
       return `${name}: ${quoted} states a figure outside a reference; say what it is in words.`;
     }
     return null;
@@ -906,9 +904,6 @@ export function checkAnswer(raw: AnswerInput, ctx: GateContext): GateResult {
     let detail: AnswerSegment[] | undefined;
     if (typeof f?.detail === "string" && f.detail.trim()) {
       const text = repairClosers(f.detail);
-      if (/[*_~`]/.test(text.replace(REF, ""))) {
-        own.push(`${name}: its line more is plain words and references, without formatting marks.`);
-      }
       // A reference stands alone: a digit, a unit or another reference right beside it would read as one number.
       if (/⟧\s?[\p{N}%]|⟧[kKmMbB]\b|\p{N}\s?⟦|⟧\s*⟦/u.test(text)) {
         own.push(`${name}: in its line more, each reference stands alone, with no digit, unit or reference beside it.`);
@@ -968,6 +963,7 @@ export function checkAnswer(raw: AnswerInput, ctx: GateContext): GateResult {
       ...(detail ? { detail } : {}),
       ...(group ? { group } : {}),
       ...(trend ? { trend } : {}),
+      ...(f.lower_is_better === true ? { lowerIsBetter: true } : {}),
     });
   }
   const titleProblem = wordsProblem("The title", input.title);

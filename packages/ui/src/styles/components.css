@@ -528,6 +528,17 @@
     gap: calc(var(--spacing) * 2);
   }
 
+  /* A headline figure's change: green for good news, red for bad (its arrow and its traced number). */
+  .answer-figures__change--good,
+  .answer-figures__change--good .traced-number {
+    color: var(--success);
+  }
+
+  .answer-figures__change--bad,
+  .answer-figures__change--bad .traced-number {
+    color: var(--danger);
+  }
+
   /*
    * An answer landing where its draft was (Ask): its text stays where the person is reading, and only its numbers fade
    * in where the pills were. What the draft didn't have rises in below it; its heading, chips and headline figures, above

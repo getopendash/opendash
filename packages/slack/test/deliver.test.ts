@@ -497,7 +497,9 @@ describe("a run's reply in Slack", () => {
         if (!refuse) {
           const types = ((stops[0]?.args.blocks ?? []) as { type: string }[]).map((b) => b.type);
           expect(types.slice(0, 3)).toEqual(["header", "carousel", "markdown"]);
-          expect(last).toContain('"*Accounts: 19*"');
+          expect(last).toContain(
+            '"title":{"type":"mrkdwn","text":"*19*"},"subtitle":{"type":"mrkdwn","text":"Accounts"}',
+          );
         } else {
           // Today's message: its words as text, the figure as a field under them.
           expect(typeof stops.at(-1)?.args.markdown_text).toBe("string");

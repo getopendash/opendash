@@ -1,15 +1,16 @@
 /**
- * An answer's headline figures in Slack: each a card in a carousel (Slack's own, side by side), a carousel for each
- * group under its heading; or, where Slack refuses cards, one section of fields (Slack's classic two columns). Every
- * number is the gate's display of a cell; nothing is computed here but the arrow, from the change's sign. Pure.
+ * An answer's headline figures in Slack: each a card (its number on top, its label, its change with a dot, green for
+ * good news and red for bad, its trend as a sparkline), two a row (Slack's carousel, so a row fits a desktop window
+ * without scrolling), under its group's heading; or, where Slack refuses cards, Slack's classic fields. Every number is
+ * the gate's display of a cell; nothing is computed here but the arrow and the dot, from the change's sign. Pure.
  */
 import type { AnswerSegment, ResolvedFigure } from "@opendash/core";
 import { quiet } from "./reply";
 
 type Block = Record<string, unknown>;
 
-/** Slack's limits for a card's text (a title and subtitle 150 characters, a body 200) and a carousel's cards (10). */
-const CARD = { title: 150, subtitle: 150, body: 200, perCarousel: 10 } as const;
+/** Slack's limits for a card's text (a title and subtitle 150 characters, a body 200), and our cards a row. */
+const CARD = { title: 150, subtitle: 150, body: 200, perRow: 2 } as const;
 
 /** Segments as shown: each reference its display. */
 export const shownOf = (segments: AnswerSegment[]) => segments.map((s) => ("ref" in s ? s.display : s.text)).join("");
@@ -30,38 +31,59 @@ export function changeLine(f: ResolvedFigure): string | null {
   return [ARROW[f.change.direction], magnitude, f.vs].filter(Boolean).join(" ");
 }
 
-/** A figure's trend in a line: "Last weeks: 6.0k · 6.2k · 6.3k · 6.7k". */
+/** Good news or bad: up is good unless it's a measure where down is (churn, cost). Flat is neither. */
+export function tone(f: ResolvedFigure): "good" | "bad" | null {
+  if (!f.change || f.change.direction === "flat") return null;
+  return (f.change.direction === "up") !== Boolean(f.lowerIsBetter) ? "good" : "bad";
+}
+
+/** A figure's change with its dot: "🟢 ▲ 6.1% vs last week". */
+function changeWithDot(f: ResolvedFigure): string | null {
+  const change = changeLine(f);
+  const t = tone(f);
+  return change && t ? `${t === "good" ? "🟢" : "🔴"} ${change}` : change;
+}
+
+const BARS = "▁▂▃▄▅▆▇█";
+
+/** Values as a sparkline, lowest to highest: "▁▃▅▇". Drawn for the eye; the numbers are the page's. */
+export function sparkline(values: number[]): string {
+  const lo = Math.min(...values);
+  const hi = Math.max(...values);
+  return values.map((v) => BARS[hi === lo ? 3 : Math.round(((v - lo) / (hi - lo)) * (BARS.length - 1))]).join("");
+}
+
+/** A figure's trend in a line: "Last weeks ▁▂▄▅▇". */
 export function trendLine(f: ResolvedFigure): string | null {
-  if (!f.trend?.points.length) return null;
-  return `${f.trend.label ?? "Trend"}: ${f.trend.points.map((p) => p.display).join(" · ")}`;
+  if (!f.trend || f.trend.points.length < 2) return null;
+  return `${f.trend.label ?? "Trend"} ${sparkline(f.trend.points.map((p) => p.value))}`;
 }
 
 /**
- * One figure as Slack's card: its label and value, its change, a line more and its trend (left out if too long). Null
- * when its value or its change can't fit whole (a card's title and subtitle are 150 characters): never a number cut.
+ * One figure as Slack's card: its number on top, its label under it, then its change with its dot, a line more and its
+ * trend (the line more left out, then the trend, if too long). Null when its number or its change can't fit whole: never a
+ * number cut.
  */
 function card(f: ResolvedFigure): Block | null {
-  // Past the title's room the label is cut, never the value.
   const value = mrkdwn(shownOf(f.value));
+  if (value.length + 2 > CARD.title) return null;
   const label = mrkdwn(f.label);
-  const room = CARD.title - value.length - 4;
-  if (room < 4) return null;
-  const title = `${label.length <= room ? label : `${label.slice(0, Math.max(room - 1, 1))}…`}: ${value}`;
-  const change = changeLine(f);
-  const subtitle = change ? mrkdwn(change) : null;
-  if (subtitle && subtitle.length > CARD.subtitle) return null;
+  const subtitle = label.length <= CARD.subtitle ? label : `${label.slice(0, CARD.subtitle - 1)}…`;
+  const change = changeWithDot(f);
+  const changed = change ? mrkdwn(change) : null;
+  if (changed && changed.length > CARD.body) return null;
   const detail = f.detail ? mrkdwn(shownOf(f.detail)) : null;
   const trend = trendLine(f);
-  // Never a number cut in two: past the card's room, the trend goes, then the line more.
+  const trended = trend ? mrkdwn(trend) : null;
   const fits = (lines: (string | null)[]) => {
     const text = lines.filter(Boolean).join("\n");
-    return text && text.length <= CARD.body ? text : null;
+    return text.length <= CARD.body ? text : null;
   };
-  const body = fits([detail, trend ? mrkdwn(trend) : null]) ?? fits([detail]) ?? fits([trend ? mrkdwn(trend) : null]);
+  const body = fits([changed, detail, trended]) ?? fits([changed, trended]) ?? fits([changed]);
   return {
     type: "card",
-    title: { type: "mrkdwn", text: `*${title}*` },
-    ...(subtitle ? { subtitle: { type: "mrkdwn", text: subtitle } } : {}),
+    title: { type: "mrkdwn", text: `*${value}*` },
+    subtitle: { type: "mrkdwn", text: subtitle },
     ...(body ? { body: { type: "mrkdwn", text: body } } : {}),
   };
 }
@@ -91,16 +113,19 @@ const marked = (f: ResolvedFigure) =>
   ].some((t) => MARKS.test(t));
 
 /**
- * The figures as Slack's cards: a carousel for each group, under its heading. A group with a figure whose numbers
- * can't fit a card whole, or whose words Slack would read as formatting, goes as Slack's classic fields instead.
+ * The figures as Slack's cards: two a row, under their group's heading. A group with a figure whose numbers can't fit
+ * a card whole, or whose words Slack would read as formatting, goes as Slack's classic fields instead.
  */
 export function figureCards(figures: ResolvedFigure[]): Block[] {
   return grouped(figures).flatMap((g) => {
-    const cards = g.figures.slice(0, CARD.perCarousel).map((f) => (marked(f) ? null : card(f)));
+    const cards = g.figures.map((f) => (marked(f) ? null : card(f)));
     if (cards.some((c) => c === null)) return figureFields(g.figures);
+    const rows = Array.from({ length: Math.ceil(cards.length / CARD.perRow) }, (_, i) =>
+      cards.slice(i * CARD.perRow, (i + 1) * CARD.perRow),
+    );
     return [
       ...(g.name ? [{ type: "section", text: { type: "mrkdwn", text: `*${mrkdwn(g.name)}*` } }] : []),
-      { type: "carousel", elements: cards },
+      ...rows.map((row) => ({ type: "carousel", elements: row })),
     ];
   });
 }
@@ -120,7 +145,7 @@ const plain = (text: string) => ({
 export function figureFields(figures: ResolvedFigure[]): Block[] {
   const field = (f: ResolvedFigure) => {
     const lines = (extra: (string | null)[]) =>
-      [f.label, shownOf(f.value), changeLine(f), ...extra].filter((l): l is string => Boolean(l?.trim())).join("\n");
+      [f.label, shownOf(f.value), changeWithDot(f), ...extra].filter((l): l is string => Boolean(l?.trim())).join("\n");
     const detail = f.detail ? shownOf(f.detail) : null;
     const text = [lines([detail, trendLine(f)]), lines([detail]), lines([])].find((t) => t.length <= 2_000);
     return plain(text ?? `${f.label}\n${shownOf(f.value)}`);

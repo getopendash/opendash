@@ -6,6 +6,12 @@ import { AnswerText, type TracedRef } from "./answer-text";
 
 const ARROW = { up: "▲", down: "▼", flat: "→" } as const;
 
+/** Good news or bad: up is good unless it's a measure where down is (churn, cost). Flat is neither. */
+function tone(f: ResolvedFigure): "good" | "bad" | null {
+  if (!f.change || f.change.direction === "flat") return null;
+  return (f.change.direction === "up") !== Boolean(f.lowerIsBetter) ? "good" : "bad";
+}
+
 /** Segments as shown: each reference its display. */
 const shownOf = (segments: AnswerSegment[]) => segments.map((s) => ("ref" in s ? s.display : s.text)).join("");
 
@@ -36,7 +42,8 @@ function grouped(figures: ResolvedFigure[]): { name: string | null; figures: { f
 
 /**
  * An answer's headline figures, as cards above its text: each its label, its value (a traced number, pressed for its
- * cell), its change with an arrow from its sign and what it's against, a line more, and its trend as bars. A group
+ * cell), its change with an arrow from its sign (green for good news, red for bad) and what it's against, a line more,
+ * and its trend as bars. A group
  * under its heading. Every number is the gate's display of a cell.
  */
 export function AnswerFigures({
@@ -73,9 +80,10 @@ export function AnswerFigures({
                 {f.change || f.vs ? (
                   <span className="flex flex-wrap items-baseline gap-1 text-small text-muted">
                     {f.change ? (
-                      <>
+                      // Green for good news, red for bad.
+                      <span className={`inline-flex items-baseline gap-1 answer-figures__change--${tone(f) ?? "flat"}`}>
                         <span aria-hidden>{ARROW[f.change.direction]}</span>
-                        <span className="sr-only">{f.change.direction}</span>
+                        <span className="sr-only">{`${f.change.direction}${tone(f) ? `, ${tone(f)}` : ""}`}</span>
                         <AnswerText
                           segments={f.change.segments}
                           scope={`figure-${at}-change`}
@@ -84,7 +92,7 @@ export function AnswerFigures({
                           unverified={unverified}
                           onTrace={onTrace}
                         />
-                      </>
+                      </span>
                     ) : null}
                     {f.vs ? <span className="text-muted-tertiary">{f.vs}</span> : null}
                   </span>

@@ -82,6 +82,7 @@ export const answer = defineTool({
           group: z.string().max(40).optional(),
           trend: z.boolean().optional().describe("Its column over time, from its query's date column"),
           trend_label: z.string().max(30).optional(),
+          lower_is_better: z.boolean().optional().describe("Down is good: churn, cost"),
         }),
       )
       .max(9)

@@ -957,21 +957,30 @@ describe("an answer's headline figures, held to the answer's checks", () => {
     expect(said(ask([{ label: "Active", value: "⟦q2:0:active⟧" }]))).toContain("its value is a measure");
   });
 
-  it("keeps a figure's words and the title to words: dates only, no figure, no reference, no marks", () => {
+  it("checks a figure's words and the title as the text is: windows and rankings are words, a typed figure isn't", () => {
     expect(said(ask([], { title: "9 orders shipped" }))).toContain('"9 orders shipped" states a figure');
-    // A number the question has, in another sense, isn't a heading's to state either.
-    expect(said(ask([], { title: "Orders rose 7%" }))).toContain("states a figure");
-    expect(said(ask([], { title: "Forty orders shipped" }))).toContain("states a figure");
     expect(said(ask([{ label: "Orders", value: "⟦q1:0:now⟧", vs: "vs 8 orders" }]))).toContain("states a figure");
     expect(said(ask([{ label: "Orders: 42", value: "⟦q1:0:now⟧" }]))).toContain("states a figure");
-    expect(said(ask([{ label: "Orders ⟦q1:0:now⟧", value: "⟦q1:0:now⟧" }]))).toContain("plain words");
-    expect(said(ask([{ label: "*Orders*", value: "⟦q1:0:now⟧" }]))).toContain("plain words");
-    expect(said(ask([{ label: "Orders", value: "⟦q1:0:now⟧", detail: "~⟦q1:0:before⟧~ before" }]))).toContain(
-      "without formatting marks",
-    );
-    for (const dated of ["October 2026 against September 2026", "Week 45, Nov 2 to Nov 8", "Q3 and H2"]) {
+    expect(said(ask([{ label: "Orders ⟦q1:0:now⟧", value: "⟦q1:0:now⟧" }]))).toContain("without references");
+    for (const dated of ["October 2026 against September 2026", "Nov 2 to Nov 8", "Q3 2026"]) {
       expect(ask([], { title: dated }).title).toBe(dated);
     }
+    const everyday = ask(
+      [{ label: "Orders, last 30 days", value: "⟦q1:0:now⟧", vs: "vs the last two weeks", trend_label: "Top 5 weeks" }],
+      { title: "The last 7 days" },
+    );
+    expect(everyday.problems).toEqual([]);
+    expect(everyday.title).toBe("The last 7 days");
+    expect(everyday.figures.map((f) => f.label)).toEqual(["Orders, last 30 days"]);
+  });
+
+  it("keeps lower is better with a figure, and nothing else of it", () => {
+    const [churn, orders] = ask([
+      { label: "Orders", value: "⟦q1:0:now⟧", lower_is_better: true },
+      { label: "Orders", value: "⟦q1:0:now⟧", lower_is_better: "yes" as never },
+    ]).figures;
+    expect(churn?.lowerIsBetter).toBe(true);
+    expect(orders).not.toHaveProperty("lowerIsBetter");
   });
 
   it("names only the row its numbers are from, in a label, a group, a line more, computed ones too", () => {
